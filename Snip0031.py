@@ -1,17 +1,28 @@
-class SpendingByCategory(MRJob):
+class SalesRanker(MRJob):
 
-    def __init__(self, categorizer):
-        self.categorizer = categorizer
-        ...
+    def mapper(self, _, line):
+        
+        timestamp, product_id, category, quantity = line.split('\t')
+        if self.within_past_week(timestamp):
+            yield (category, product_id), quantity
 
-    def current_year_month(self):
-        """Return the current year and month."""
-        ...
+    def reducer(self, key, values):
 
-    def extract_year_month(self, timestamp):
-        """Return the year and month portions of the timestamp."""
-        ...
+        yield key, sum(values)
 
-    def handle_budget_notifications(self, key, total):
-        """Call notification API if nearing or exceeded budget."""
-        ...
+    def mapper_sort(self, key, value):
+
+        category, product_id = key
+        quantity = value
+        yield (category, quantity), product_id
+
+    def reducer_identity(self, key, value):
+        yield key, value
+
+    def steps(self):
+        return [
+            self.mr(mapper=self.mapper,
+                    reducer=self.reducer),
+            self.mr(mapper=self.mapper_sort,
+                    reducer=self.reducer_identity),
+        ]
