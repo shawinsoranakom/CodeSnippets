@@ -1,11 +1,4 @@
 def running_key_decrypt(key: str, ciphertext: str) -> str:
-    """
-    Decrypts the ciphertext using the Running Key Cipher.
-
-    :param key: The running key (long piece of text).
-    :param ciphertext: The ciphertext to be decrypted.
-    :return: The plaintext.
-    """
     ciphertext = ciphertext.replace(" ", "").upper()
     key = key.replace(" ", "").upper()
     key_length = len(key)
