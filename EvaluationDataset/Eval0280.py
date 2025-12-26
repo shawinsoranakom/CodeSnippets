@@ -1,0 +1,16 @@
+def test_insert() -> bool:
+    tree = RedBlackTree(0)
+    tree.insert(8)
+    tree.insert(-8)
+    tree.insert(4)
+    tree.insert(12)
+    tree.insert(10)
+    tree.insert(11)
+    ans = RedBlackTree(0, 0)
+    ans.left = RedBlackTree(-8, 0, ans)
+    ans.right = RedBlackTree(8, 1, ans)
+    ans.right.left = RedBlackTree(4, 0, ans.right)
+    ans.right.right = RedBlackTree(11, 0, ans.right)
+    ans.right.right.left = RedBlackTree(10, 1, ans.right.right)
+    ans.right.right.right = RedBlackTree(12, 1, ans.right.right)
+    return tree == ans
