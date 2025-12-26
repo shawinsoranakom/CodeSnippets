@@ -1,0 +1,12 @@
+def main() -> None:
+    print("\n2 in octal is:")
+    print(decimal_to_octal(2)) 
+    print("\n8 in octal is:")
+    print(decimal_to_octal(8))  
+    print("\n65 in octal is:")
+    print(decimal_to_octal(65))  
+    print("\n216 in octal is:")
+    print(decimal_to_octal(216)) 
+    print("\n512 in octal is:")
+    print(decimal_to_octal(512)) 
+    print("\n")
