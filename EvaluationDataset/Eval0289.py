@@ -1,0 +1,12 @@
+def main() -> None:
+    print_results("Rotating right and left", test_rotations())
+    print_results("Inserting", test_insert())
+    print_results("Searching", test_insert_and_search())
+    print_results("Deleting", test_insert_delete())
+    print_results("Floor and ceil", test_floor_ceil())
+    print_results("Tree traversal", test_tree_traversal())
+    print_results("Tree traversal", test_tree_chaining())
+    print("Testing tree balancing...")
+    print("This should only be a few seconds.")
+    test_insertion_speed()
+    print("Done!")
