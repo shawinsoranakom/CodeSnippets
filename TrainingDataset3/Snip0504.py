@@ -1,0 +1,33 @@
+def main():
+    from doctest import testmod
+
+    testmod()
+
+    linked_list = LinkedList()
+    linked_list.insert_head(input("Inserting 1st at head ").strip())
+    linked_list.insert_head(input("Inserting 2nd at head ").strip())
+    print("\nPrint list:")
+    linked_list.print_list()
+    linked_list.insert_tail(input("\nInserting 1st at tail ").strip())
+    linked_list.insert_tail(input("Inserting 2nd at tail ").strip())
+    print("\nPrint list:")
+    linked_list.print_list()
+    print("\nDelete head")
+    linked_list.delete_head()
+    print("Delete tail")
+    linked_list.delete_tail()
+    print("\nPrint list:")
+    linked_list.print_list()
+    print("\nReverse linked list")
+    linked_list.reverse()
+    print("\nPrint list:")
+    linked_list.print_list()
+    print("\nString representation of linked list:")
+    print(linked_list)
+    print("\nReading/changing Node data using indexing:")
+    print(f"Element at Position 1: {linked_list[1]}")
+    linked_list[1] = input("Enter New Value: ").strip()
+    print("New list:")
+    print(linked_list)
+    print(f"length of linked_list is : {len(linked_list)}")
+
