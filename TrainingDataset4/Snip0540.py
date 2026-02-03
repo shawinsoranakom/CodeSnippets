@@ -3,6 +3,3 @@ def dequeue(self) -> int:
         if queue:
             return queue.pop(0)
     raise UnderFlowError("All queues are empty")
-
-def __str__(self) -> str:
-    return "\n".join(f"Priority {i}: {q}" for i, q in enumerate(self.queues))
