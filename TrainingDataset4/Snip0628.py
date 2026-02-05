@@ -1,2 +1,6 @@
-def test_search_empty_pattern(self) -> None:
-    assert self.suffix_tree.search(""), "An empty pattern should be found."
+def print_tree(self, height: int = 0) -> None:
+    if self.prefix != "":
+        print("-" * height, self.prefix, "  (leaf)" if self.is_leaf else "")
+
+    for value in self.nodes.values():
+        value.print_tree(height + 1)
