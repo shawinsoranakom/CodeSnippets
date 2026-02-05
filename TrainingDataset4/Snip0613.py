@@ -1,2 +1,3 @@
-def is_empty(self) -> bool:
-    return self.head is None
+def __init__(self) -> None:
+        self.nodes: dict[str, TrieNode] = {}  
+        self.is_leaf = False
