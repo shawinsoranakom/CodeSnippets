@@ -1,2 +1,15 @@
-def __len__(self) -> int:
-    return len(tuple(iter(self)))
+def test_trie() -> bool:
+    words = "banana bananas bandana band apple all beast".split()
+    root = RadixNode()
+    root.insert_many(words)
+
+    assert all(root.find(word) for word in words)
+    assert not root.find("bandanas")
+    assert not root.find("apps")
+    root.delete("all")
+    assert not root.find("all")
+    root.delete("banana")
+    assert not root.find("banana")
+    assert root.find("bananas")
+
+    return True
