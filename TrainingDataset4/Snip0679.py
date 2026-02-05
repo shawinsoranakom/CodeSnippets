@@ -1,8 +1,12 @@
-def convert_to_negative(img):
-    pixel_h, pixel_v = img.shape[0], img.shape[1]
-
-    for i in range(pixel_h):
-        for j in range(pixel_v):
-            img[i][j] = [255, 255, 255] - img[i][j]
-
-    return img
+def set_matricies(self, red=None, green=None, blue=None, red_edge=None, nir=None):
+    if red is not None:
+        self.red = red
+    if green is not None:
+        self.green = green
+    if blue is not None:
+        self.blue = blue
+    if red_edge is not None:
+        self.redEdge = red_edge
+    if nir is not None:
+        self.nir = nir
+    return True
