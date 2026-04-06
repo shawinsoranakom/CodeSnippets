@@ -1,0 +1,3 @@
+def test_get_new_command_mocked(subp_mock, command, new_command, return_value):
+    subp_mock.check_output.return_value = return_value
+    assert get_new_command(command) == new_command

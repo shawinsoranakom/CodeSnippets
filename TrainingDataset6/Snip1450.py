@@ -1,0 +1,2 @@
+def suggested():
+    return 'install'

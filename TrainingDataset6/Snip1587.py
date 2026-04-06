@@ -1,0 +1,3 @@
+def test_get_history(self, history_lines, shell):
+        history_lines(['ls', 'rm'])
+        assert list(shell.get_history()) == ['ls', 'rm']
