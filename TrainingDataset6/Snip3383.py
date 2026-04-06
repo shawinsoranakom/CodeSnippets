@@ -1,0 +1,23 @@
+def test_optional_list_schema(path: str):
+    openapi = app.openapi()
+    body_model_name = get_body_model_name(openapi, path)
+
+    assert app.openapi()["components"]["schemas"][body_model_name] == {
+        "properties": {
+            "p": {
+                "anyOf": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "contentMediaType": "application/octet-stream",
+                        },
+                    },
+                    {"type": "null"},
+                ],
+                "title": "P",
+            }
+        },
+        "title": body_model_name,
+        "type": "object",
+    }

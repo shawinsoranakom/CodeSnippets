@@ -1,0 +1,3 @@
+async def stream_items_no_annotation():
+    for item in items:
+        yield item

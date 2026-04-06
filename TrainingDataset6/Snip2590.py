@@ -1,0 +1,5 @@
+async def get_sub(websocket: WebSocket, sessions: NamedSessionsDep) -> Any:
+    await websocket.accept()
+    await websocket.send_json(
+        {"named_session_open": sessions[0].open, "session_open": sessions[1].open}
+    )

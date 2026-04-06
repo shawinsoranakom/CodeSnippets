@@ -1,0 +1,4 @@
+def read_users_me(current_user: User | None = Depends(get_current_user)):
+    if current_user is None:
+        return {"msg": "Create an account first"}
+    return current_user

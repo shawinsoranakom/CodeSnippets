@@ -1,0 +1,2 @@
+def test_get_name_with_age_pass_int():
+    assert get_name_with_age("John", 30) == "John is this old: 30"
