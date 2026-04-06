@@ -1,8 +1,0 @@
-def get_closest(word, possibilities, cutoff=0.6, fallback_to_first=True):
-    """Returns closest match or just first from possibilities."""
-    possibilities = list(possibilities)
-    try:
-        return difflib_get_close_matches(word, possibilities, 1, cutoff)[0]
-    except IndexError:
-        if fallback_to_first:
-            return possibilities[0]
