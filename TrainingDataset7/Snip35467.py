@@ -1,0 +1,11 @@
+def test_query_filter_with_timezones(self):
+        tz = zoneinfo.ZoneInfo("Europe/Paris")
+        dt = datetime.datetime(2011, 9, 1, 12, 20, 30, tzinfo=tz)
+        Event.objects.create(dt=dt)
+        next = dt + datetime.timedelta(seconds=3)
+        prev = dt - datetime.timedelta(seconds=3)
+        self.assertEqual(Event.objects.filter(dt__exact=dt).count(), 1)
+        self.assertEqual(Event.objects.filter(dt__exact=next).count(), 0)
+        self.assertEqual(Event.objects.filter(dt__in=(prev, next)).count(), 0)
+        self.assertEqual(Event.objects.filter(dt__in=(prev, dt, next)).count(), 1)
+        self.assertEqual(Event.objects.filter(dt__range=(prev, next)).count(), 1)

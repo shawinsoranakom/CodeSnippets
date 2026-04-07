@@ -1,0 +1,10 @@
+def test_default_attributes(self):
+        migration = type("Migration", (migrations.Migration,), {})
+        writer = MigrationWriter(migration)
+        output = writer.as_string()
+        self.assertIn("    dependencies = [\n    ]\n", output)
+        self.assertIn("    operations = [\n    ]\n", output)
+        self.assertNotIn("atomic", output)
+        self.assertNotIn("initial", output)
+        self.assertNotIn("run_before", output)
+        self.assertNotIn("replaces", output)

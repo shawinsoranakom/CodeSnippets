@@ -1,0 +1,11 @@
+def test_boolean_field(self):
+        field = models.BooleanField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.BooleanField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.BooleanField(default=True)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.BooleanField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"default": True})

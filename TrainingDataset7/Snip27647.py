@@ -1,0 +1,16 @@
+def test_generic_fk(self):
+        A = self.create_model(
+            "A",
+            foreign_keys=[
+                models.ForeignKey("B", models.CASCADE),
+                GenericForeignKey(),
+            ],
+        )
+        B = self.create_model(
+            "B",
+            foreign_keys=[
+                models.ForeignKey("C", models.CASCADE),
+            ],
+        )
+        self.assertRelated(A, [B])
+        self.assertRelated(B, [A])

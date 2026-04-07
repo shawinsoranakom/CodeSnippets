@@ -1,0 +1,24 @@
+def setUpTestData(cls):
+        cls.tenant_1 = Tenant.objects.create()
+        cls.tenant_2 = Tenant.objects.create()
+        cls.user_1 = User.objects.create(
+            tenant=cls.tenant_1,
+            id=1,
+            email="user0001@example.com",
+        )
+        cls.user_2 = User.objects.create(
+            tenant=cls.tenant_1,
+            id=2,
+            email="user0002@example.com",
+        )
+        cls.user_3 = User.objects.create(
+            tenant=cls.tenant_2,
+            id=3,
+            email="user0003@example.com",
+        )
+        cls.comment_1 = Comment.objects.create(id=1, user=cls.user_2, text="foo")
+        cls.comment_2 = Comment.objects.create(id=2, user=cls.user_1, text="bar")
+        cls.comment_3 = Comment.objects.create(id=3, user=cls.user_1, text="foobar")
+        cls.comment_4 = Comment.objects.create(id=4, user=cls.user_3, text="foobarbaz")
+        cls.comment_5 = Comment.objects.create(id=5, user=cls.user_3, text="barbaz")
+        cls.comment_6 = Comment.objects.create(id=6, user=cls.user_3, text="baz")

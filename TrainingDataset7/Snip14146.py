@@ -1,0 +1,12 @@
+def iter_all_python_module_files():
+    # This is a hot path during reloading. Create a stable sorted list of
+    # modules based on the module name and pass it to iter_modules_and_files().
+    # This ensures cached results are returned in the usual case that modules
+    # aren't loaded on the fly.
+    keys = sorted(sys.modules)
+    modules = tuple(
+        m
+        for m in map(sys.modules.__getitem__, keys)
+        if not isinstance(m, weakref.ProxyTypes)
+    )
+    return iter_modules_and_files(modules, frozenset(_error_files))

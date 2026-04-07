@@ -1,0 +1,73 @@
+def test_m2m_and_m2o(self):
+        r = User.objects.create(username="russell")
+        g = User.objects.create(username="gustav")
+
+        i1 = Issue(num=1)
+        i1.client = r
+        i1.save()
+
+        i2 = Issue(num=2)
+        i2.client = r
+        i2.save()
+        i2.cc.add(r)
+
+        i3 = Issue(num=3)
+        i3.client = g
+        i3.save()
+        i3.cc.add(r)
+
+        self.assertQuerySetEqual(
+            Issue.objects.filter(client=r.id),
+            [
+                1,
+                2,
+            ],
+            lambda i: i.num,
+        )
+        self.assertQuerySetEqual(
+            Issue.objects.filter(client=g.id),
+            [
+                3,
+            ],
+            lambda i: i.num,
+        )
+        self.assertQuerySetEqual(Issue.objects.filter(cc__id__exact=g.id), [])
+        self.assertQuerySetEqual(
+            Issue.objects.filter(cc__id__exact=r.id),
+            [
+                2,
+                3,
+            ],
+            lambda i: i.num,
+        )
+
+        # These queries combine results from the m2m and the m2o relationships.
+        # They're three ways of saying the same thing.
+        self.assertQuerySetEqual(
+            Issue.objects.filter(Q(cc__id__exact=r.id) | Q(client=r.id)),
+            [
+                1,
+                2,
+                3,
+            ],
+            lambda i: i.num,
+        )
+        self.assertQuerySetEqual(
+            Issue.objects.filter(cc__id__exact=r.id)
+            | Issue.objects.filter(client=r.id),
+            [
+                1,
+                2,
+                3,
+            ],
+            lambda i: i.num,
+        )
+        self.assertQuerySetEqual(
+            Issue.objects.filter(Q(client=r.id) | Q(cc__id__exact=r.id)),
+            [
+                1,
+                2,
+                3,
+            ],
+            lambda i: i.num,
+        )

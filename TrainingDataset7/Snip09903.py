@@ -1,0 +1,18 @@
+def _sqlite_time_trunc(lookup_type, dt, tzname, conn_tzname):
+    if dt is None:
+        return None
+    dt_parsed = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    if dt_parsed is None:
+        try:
+            dt = typecast_time(dt)
+        except (ValueError, TypeError):
+            return None
+    else:
+        dt = dt_parsed
+    if lookup_type == "hour":
+        return f"{dt.hour:02d}:00:00"
+    elif lookup_type == "minute":
+        return f"{dt.hour:02d}:{dt.minute:02d}:00"
+    elif lookup_type == "second":
+        return f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+    raise ValueError(f"Unsupported lookup type: {lookup_type!r}")

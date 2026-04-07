@@ -1,0 +1,5 @@
+def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(
+            username="super", password="secret", email="super@example.com"
+        )
+        cls.collector = Collector.objects.create(pk=1, name="John Fowles")

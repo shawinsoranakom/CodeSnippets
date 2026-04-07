@@ -1,0 +1,10 @@
+def setUpTestData(cls):
+        f1 = Food.objects.create(name="apples")
+        cls.f2 = Food.objects.create(name="oranges")
+        Eaten.objects.create(food=f1, meal="dinner")
+        cls.j1 = Job.objects.create(name="Manager")
+        cls.r1 = Responsibility.objects.create(description="Playing golf")
+        cls.j2 = Job.objects.create(name="Programmer")
+        cls.r2 = Responsibility.objects.create(description="Programming")
+        JobResponsibilities.objects.create(job=cls.j1, responsibility=cls.r1)
+        JobResponsibilities.objects.create(job=cls.j2, responsibility=cls.r2)

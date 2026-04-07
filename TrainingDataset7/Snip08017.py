@@ -1,0 +1,14 @@
+def _key_to_file(self, session_key=None):
+        """
+        Get the file associated with this session key.
+        """
+        if session_key is None:
+            session_key = self._get_or_create_session_key()
+
+        # Make sure we're not vulnerable to directory traversal. Session keys
+        # should always be md5s, so they should never contain directory
+        # components.
+        if not set(session_key).issubset(VALID_KEY_CHARS):
+            raise InvalidSessionKey("Invalid characters in session key")
+
+        return os.path.join(self.storage_path, self.file_prefix + session_key)

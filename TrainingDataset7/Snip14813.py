@@ -1,0 +1,5 @@
+async def _view_wrapper(*args, **kwargs):
+            response = await view_func(*args, **kwargs)
+            if response.get("X-Frame-Options") is None:
+                response["X-Frame-Options"] = "SAMEORIGIN"
+            return response

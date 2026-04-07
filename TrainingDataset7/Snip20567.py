@@ -1,0 +1,6 @@
+def test_transform(self):
+        with register_lookup(DecimalField, Sqrt):
+            DecimalModel.objects.create(n1=Decimal("6.0"), n2=Decimal("0"))
+            DecimalModel.objects.create(n1=Decimal("1.0"), n2=Decimal("0"))
+            obj = DecimalModel.objects.filter(n1__sqrt__gt=2).get()
+            self.assertEqual(obj.n1, Decimal("6.0"))

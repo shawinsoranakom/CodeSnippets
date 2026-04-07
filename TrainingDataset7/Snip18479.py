@@ -1,0 +1,2 @@
+def blocker(*args):
+            pass

@@ -1,0 +1,10 @@
+def test_difference_with_empty_qs(self):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.none()
+        qs3 = Number.objects.filter(pk__in=[])
+        self.assertEqual(len(qs1.difference(qs2)), 10)
+        self.assertEqual(len(qs1.difference(qs3)), 10)
+        self.assertEqual(len(qs2.difference(qs1)), 0)
+        self.assertEqual(len(qs3.difference(qs1)), 0)
+        self.assertEqual(len(qs2.difference(qs2)), 0)
+        self.assertEqual(len(qs3.difference(qs3)), 0)

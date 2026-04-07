@@ -1,0 +1,2 @@
+def f():
+            return iter([])

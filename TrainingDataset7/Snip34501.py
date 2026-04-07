@@ -1,0 +1,2 @@
+def iteration():
+            list(response)

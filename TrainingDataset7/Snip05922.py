@@ -1,0 +1,5 @@
+def get_model_from_relation(field):
+    if hasattr(field, "path_infos"):
+        return field.path_infos[-1].to_opts.model
+    else:
+        raise NotRelationField

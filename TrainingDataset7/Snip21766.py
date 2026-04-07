@@ -1,0 +1,11 @@
+def test_url_field(self):
+        field = models.URLField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.URLField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.URLField(max_length=231)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.URLField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"max_length": 231})

@@ -1,0 +1,12 @@
+def test_union_with_empty_qs(self):
+        qs1 = Number.objects.all()
+        qs2 = Number.objects.none()
+        qs3 = Number.objects.filter(pk__in=[])
+        self.assertEqual(len(qs1.union(qs2)), 10)
+        self.assertEqual(len(qs2.union(qs1)), 10)
+        self.assertEqual(len(qs1.union(qs3)), 10)
+        self.assertEqual(len(qs3.union(qs1)), 10)
+        self.assertEqual(len(qs2.union(qs1, qs1, qs1)), 10)
+        self.assertEqual(len(qs2.union(qs1, qs1, all=True)), 20)
+        self.assertEqual(len(qs2.union(qs2)), 0)
+        self.assertEqual(len(qs3.union(qs3)), 0)

@@ -1,0 +1,18 @@
+async def _aget_permissions(self, user_obj, obj, from_name):
+        """See _get_permissions()."""
+        if not user_obj.is_active or user_obj.is_anonymous or obj is not None:
+            return set()
+
+        perm_cache_name = "_%s_perm_cache" % from_name
+        if not hasattr(user_obj, perm_cache_name):
+            if user_obj.is_superuser:
+                perms = Permission.objects.all()
+            else:
+                perms = getattr(self, "_get_%s_permissions" % from_name)(user_obj)
+            perms = perms.values_list("content_type__app_label", "codename").order_by()
+            setattr(
+                user_obj,
+                perm_cache_name,
+                {"%s.%s" % (ct, name) async for ct, name in perms},
+            )
+        return getattr(user_obj, perm_cache_name)

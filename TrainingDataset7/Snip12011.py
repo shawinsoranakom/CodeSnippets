@@ -1,0 +1,12 @@
+def distinct(self, *field_names):
+        """
+        Return a new QuerySet instance that will select only distinct results.
+        """
+        self._not_support_combined_queries("distinct")
+        if self.query.is_sliced:
+            raise TypeError(
+                "Cannot create distinct fields once a slice has been taken."
+            )
+        obj = self._chain()
+        obj.query.add_distinct_fields(*field_names)
+        return obj

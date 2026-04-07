@@ -1,0 +1,11 @@
+def test_double_subquery_in(self):
+        lfa1 = LeafA.objects.create(data="foo")
+        lfa2 = LeafA.objects.create(data="bar")
+        lfb1 = LeafB.objects.create(data="lfb1")
+        lfb2 = LeafB.objects.create(data="lfb2")
+        Join.objects.create(a=lfa1, b=lfb1)
+        Join.objects.create(a=lfa2, b=lfb2)
+        leaf_as = LeafA.objects.filter(data="foo").values_list("pk", flat=True)
+        joins = Join.objects.filter(a__in=leaf_as).values_list("b__id", flat=True)
+        qs = LeafB.objects.filter(pk__in=joins)
+        self.assertSequenceEqual(qs, [lfb1])

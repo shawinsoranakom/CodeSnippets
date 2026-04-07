@@ -1,0 +1,12 @@
+def test_mail_admins_fail_silently_conflict(self):
+        msg = (
+            "fail_silently cannot be used with a connection. "
+            "Pass fail_silently to get_connection() instead."
+        )
+        with self.assertRaisesMessage(TypeError, msg):
+            mail.mail_admins(
+                "Subject",
+                "Message",
+                fail_silently=True,
+                connection=mail.get_connection(),
+            )

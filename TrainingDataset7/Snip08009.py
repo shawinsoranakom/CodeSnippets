@@ -1,0 +1,29 @@
+async def asave(self, must_create=False):
+        """See save()."""
+        if self.session_key is None:
+            return await self.acreate()
+        data = await self._aget_session(no_load=must_create)
+        obj = await self.acreate_model_instance(data)
+        using = router.db_for_write(self.model, instance=obj)
+        try:
+            # This code MOST run in a transaction, so it requires
+            # @sync_to_async wrapping until transaction.atomic() supports
+            # async.
+            @sync_to_async
+            def sync_transaction():
+                with transaction.atomic(using=using):
+                    obj.save(
+                        force_insert=must_create,
+                        force_update=not must_create,
+                        using=using,
+                    )
+
+            await sync_transaction()
+        except IntegrityError:
+            if must_create:
+                raise CreateError
+            raise
+        except DatabaseError:
+            if not must_create:
+                raise UpdateError
+            raise

@@ -1,0 +1,13 @@
+def test_properties(self):
+        self.assertIsNone(self.user.pk)
+        self.assertEqual(self.user.username, "")
+        self.assertEqual(self.user.get_username(), "")
+        self.assertIs(self.user.is_anonymous, True)
+        self.assertIs(self.user.is_authenticated, False)
+        self.assertIs(self.user.is_staff, False)
+        self.assertIs(self.user.is_active, False)
+        self.assertIs(self.user.is_superuser, False)
+        self.assertEqual(self.user.groups.count(), 0)
+        self.assertEqual(self.user.user_permissions.count(), 0)
+        self.assertEqual(self.user.get_user_permissions(), set())
+        self.assertEqual(self.user.get_group_permissions(), set())

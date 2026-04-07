@@ -1,0 +1,11 @@
+def __add__(self, other):
+        combined = Media()
+        combined._css_lists = self._css_lists[:]
+        combined._js_lists = self._js_lists[:]
+        for item in other._css_lists:
+            if item and item not in self._css_lists:
+                combined._css_lists.append(item)
+        for item in other._js_lists:
+            if item and item not in self._js_lists:
+                combined._js_lists.append(item)
+        return combined

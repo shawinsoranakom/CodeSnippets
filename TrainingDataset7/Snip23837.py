@@ -1,0 +1,13 @@
+def test_paginated_orphaned_queryset(self):
+        self._make_authors(92)
+        res = self.client.get("/list/authors/paginated-orphaned/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["page_obj"].number, 1)
+        res = self.client.get("/list/authors/paginated-orphaned/", {"page": "last"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["page_obj"].number, 3)
+        res = self.client.get("/list/authors/paginated-orphaned/", {"page": "3"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["page_obj"].number, 3)
+        res = self.client.get("/list/authors/paginated-orphaned/", {"page": "4"})
+        self.assertEqual(res.status_code, 404)

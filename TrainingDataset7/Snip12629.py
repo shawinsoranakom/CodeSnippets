@@ -1,0 +1,11 @@
+def __init__(self, options=None):
+        self.model = getattr(options, "model", None)
+        self.fields = getattr(options, "fields", None)
+        self.exclude = getattr(options, "exclude", None)
+        self.widgets = getattr(options, "widgets", None)
+        self.localized_fields = getattr(options, "localized_fields", None)
+        self.labels = getattr(options, "labels", None)
+        self.help_texts = getattr(options, "help_texts", None)
+        self.error_messages = getattr(options, "error_messages", None)
+        self.field_classes = getattr(options, "field_classes", None)
+        self.formfield_callback = getattr(options, "formfield_callback", None)

@@ -1,0 +1,11 @@
+def test_slug_field(self):
+        field = models.SlugField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.SlugField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.SlugField(db_index=False, max_length=231)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.SlugField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"db_index": False, "max_length": 231})

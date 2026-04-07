@@ -1,0 +1,11 @@
+def test_validates_incorrect_plain_address(self):
+        self.assertFalse(is_valid_ipv6_address("foo"))
+        self.assertFalse(is_valid_ipv6_address("127.0.0.1"))
+        self.assertFalse(is_valid_ipv6_address("12345::"))
+        self.assertFalse(is_valid_ipv6_address("1::2:3::4"))
+        self.assertFalse(is_valid_ipv6_address("1::zzz"))
+        self.assertFalse(is_valid_ipv6_address("1::2:3:4:5:6:7:8"))
+        self.assertFalse(is_valid_ipv6_address("1:2"))
+        self.assertFalse(is_valid_ipv6_address("1:::2"))
+        self.assertFalse(is_valid_ipv6_address("fe80::223: 6cff:fe8a:2e8a"))
+        self.assertFalse(is_valid_ipv6_address("2a02::223:6cff :fe8a:2e8a"))

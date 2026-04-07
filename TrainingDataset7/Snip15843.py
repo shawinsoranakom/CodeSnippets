@@ -1,0 +1,15 @@
+def test_suppress_base_options_command_help(self):
+        args = ["suppress_base_options_command", "--help"]
+        out, err = self.run_manage(args)
+        self.assertNoOutput(err)
+        self.assertOutput(out, "Test suppress base options command.")
+        self.assertNotInOutput(out, "input file")
+        self.assertOutput(out, "-h, --help")
+        self.assertNotInOutput(out, "--version")
+        self.assertNotInOutput(out, "--verbosity")
+        self.assertNotInOutput(out, "-v {0,1,2,3}")
+        self.assertNotInOutput(out, "--settings")
+        self.assertNotInOutput(out, "--pythonpath")
+        self.assertNotInOutput(out, "--traceback")
+        self.assertNotInOutput(out, "--no-color")
+        self.assertNotInOutput(out, "--force-color")

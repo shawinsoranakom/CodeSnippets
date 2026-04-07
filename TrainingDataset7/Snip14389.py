@@ -1,0 +1,13 @@
+def filepath_to_uri(path):
+    """Convert a file system path to a URI portion that is suitable for
+    inclusion in a URL.
+
+    Encode certain chars that would normally be recognized as special chars
+    for URIs. Do not encode the ' character, as it is a valid character
+    within URIs. See the encodeURIComponent() JavaScript function for details.
+    """
+    if path is None:
+        return path
+    # I know about `os.sep` and `os.altsep` but I want to leave
+    # some flexibility for hardcoding separators.
+    return quote(str(path).replace("\\", "/"), safe="/~!*()'")

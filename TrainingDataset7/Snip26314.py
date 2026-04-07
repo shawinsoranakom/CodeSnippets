@@ -1,0 +1,10 @@
+def test_add_remove_set_by_to_field(self):
+        user_1 = User.objects.create(username="Jean")
+        user_2 = User.objects.create(username="Joe")
+        a5 = Article.objects.create(headline="Django lets you create web apps easily")
+        a5.authors.add(user_1.username)
+        self.assertSequenceEqual(a5.authors.all(), [user_1])
+        a5.authors.set([user_2.username])
+        self.assertSequenceEqual(a5.authors.all(), [user_2])
+        a5.authors.remove(user_2.username)
+        self.assertSequenceEqual(a5.authors.all(), [])

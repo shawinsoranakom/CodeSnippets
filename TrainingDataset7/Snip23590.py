@@ -1,0 +1,11 @@
+def test_ticket_20564(self):
+        b1 = B.objects.create()
+        b2 = B.objects.create()
+        b3 = B.objects.create()
+        c1 = C.objects.create(b=b1)
+        c2 = C.objects.create(b=b2)
+        c3 = C.objects.create(b=b3)
+        A.objects.create(flag=None, content_object=b1)
+        A.objects.create(flag=True, content_object=b2)
+        self.assertSequenceEqual(C.objects.filter(b__a__flag=None), [c1, c3])
+        self.assertSequenceEqual(C.objects.exclude(b__a__flag=None), [c2])

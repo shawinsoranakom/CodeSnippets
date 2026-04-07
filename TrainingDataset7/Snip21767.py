@@ -1,0 +1,10 @@
+def test_binary_field(self):
+        field = models.BinaryField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.BinaryField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.BinaryField(editable=True)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"editable": True})

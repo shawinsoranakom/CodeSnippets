@@ -1,0 +1,12 @@
+def translation_file_changed(sender, file_path, **kwargs):
+    """Clear the internal translations cache if a .mo file is modified."""
+    if file_path.suffix == ".mo":
+        import gettext
+
+        from django.utils.translation import trans_real
+
+        gettext._translations = {}
+        trans_real._translations = {}
+        trans_real._default = None
+        trans_real._active = Local()
+        return True

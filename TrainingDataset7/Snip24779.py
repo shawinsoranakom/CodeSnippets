@@ -1,0 +1,11 @@
+def test_immutable_basic_operations(self):
+        q = QueryDict()
+        self.assertEqual(q.getlist("foo"), [])
+        self.assertNotIn("foo", q)
+        self.assertEqual(list(q), [])
+        self.assertEqual(list(q.items()), [])
+        self.assertEqual(list(q.lists()), [])
+        self.assertEqual(list(q.keys()), [])
+        self.assertEqual(list(q.values()), [])
+        self.assertEqual(len(q), 0)
+        self.assertEqual(q.urlencode(), "")

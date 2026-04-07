@@ -1,0 +1,11 @@
+def test_email_field(self):
+        field = models.EmailField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.EmailField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"max_length": 254})
+        field = models.EmailField(max_length=255)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.EmailField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"max_length": 255})

@@ -1,0 +1,11 @@
+def wait_for_text(self, css_selector, text, timeout=10):
+        """
+        Block until the text is found in the CSS selector.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
+
+        self.wait_until(
+            ec.text_to_be_present_in_element((By.CSS_SELECTOR, css_selector), text),
+            timeout,
+        )

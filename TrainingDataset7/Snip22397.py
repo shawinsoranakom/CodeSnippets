@@ -1,0 +1,13 @@
+def setUpTestData(cls):
+        super().setUpTestData()
+        cls.customer_1 = Customer.objects.create(customer_id=1, company="a")
+        cls.customer_2 = Customer.objects.create(customer_id=1, company="b")
+        cls.customer_3 = Customer.objects.create(customer_id=2, company="c")
+        cls.customer_4 = Customer.objects.create(customer_id=3, company="d")
+        cls.customer_5 = Customer.objects.create(customer_id=1, company="e")
+        cls.contact_1 = Contact.objects.create(customer=cls.customer_1)
+        cls.contact_2 = Contact.objects.create(customer=cls.customer_1)
+        cls.contact_3 = Contact.objects.create(customer=cls.customer_2)
+        cls.contact_4 = Contact.objects.create(customer=cls.customer_3)
+        cls.contact_5 = Contact.objects.create(customer=cls.customer_1)
+        cls.contact_6 = Contact.objects.create(customer=cls.customer_5)

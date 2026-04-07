@@ -1,0 +1,17 @@
+def test_get_set_m(self):
+        geom = GEOSGeometry("POINT ZM (1 2 3 4)")
+        coord_seq = GEOSCoordSeq(capi.get_cs(geom.ptr), z=True)
+        self.assertEqual(coord_seq.tuple, (1, 2, 3, 4))
+        self.assertEqual(coord_seq.getM(0), 4)
+        coord_seq.setM(0, 10)
+        self.assertEqual(coord_seq.tuple, (1, 2, 3, 10))
+        self.assertEqual(coord_seq.getM(0), 10)
+
+        geom = GEOSGeometry("POINT M (1 2 4)")
+        coord_seq = GEOSCoordSeq(capi.get_cs(geom.ptr), z=False)
+        self.assertEqual(coord_seq.tuple, (1, 2, 4))
+        self.assertEqual(coord_seq.getM(0), 4)
+        coord_seq.setM(0, 10)
+        self.assertEqual(coord_seq.tuple, (1, 2, 10))
+        self.assertEqual(coord_seq.getM(0), 10)
+        self.assertIs(math.isnan(coord_seq.getZ(0)), True)

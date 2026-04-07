@@ -1,0 +1,10 @@
+def __init__(self, params):
+        params = params.copy()
+        options = params.pop("OPTIONS").copy()
+        options.setdefault("autoescape", True)
+        options.setdefault("debug", settings.DEBUG)
+        options.setdefault("file_charset", "utf-8")
+        libraries = options.get("libraries", {})
+        options["libraries"] = self.get_templatetag_libraries(libraries)
+        super().__init__(params)
+        self.engine = Engine(self.dirs, self.app_dirs, **options)

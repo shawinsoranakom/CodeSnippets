@@ -1,0 +1,10 @@
+def test_serialize_proxy_model(self):
+        BaseModel.objects.create(parent_data=1)
+        base_objects = BaseModel.objects.all()
+        proxy_objects = ProxyBaseModel.objects.all()
+        proxy_proxy_objects = ProxyProxyBaseModel.objects.all()
+        base_data = serializers.serialize("json", base_objects)
+        proxy_data = serializers.serialize("json", proxy_objects)
+        proxy_proxy_data = serializers.serialize("json", proxy_proxy_objects)
+        self.assertEqual(base_data, proxy_data.replace("proxy", ""))
+        self.assertEqual(base_data, proxy_proxy_data.replace("proxy", ""))

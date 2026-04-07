@@ -1,0 +1,10 @@
+def test_pickle(self):
+        q = QueryDict()
+        q1 = pickle.loads(pickle.dumps(q, 2))
+        self.assertEqual(q, q1)
+        q = QueryDict("a=b&c=d")
+        q1 = pickle.loads(pickle.dumps(q, 2))
+        self.assertEqual(q, q1)
+        q = QueryDict("a=b&c=d&a=1")
+        q1 = pickle.loads(pickle.dumps(q, 2))
+        self.assertEqual(q, q1)

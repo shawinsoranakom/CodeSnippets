@@ -1,0 +1,6 @@
+def json_script(value, element_id=None):
+    """
+    Output value JSON-encoded, wrapped in a <script type="application/json">
+    tag (with an optional id).
+    """
+    return _json_script(value, element_id)

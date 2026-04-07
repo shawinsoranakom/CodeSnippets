@@ -1,0 +1,9 @@
+def check_cross_origin_opener_policy(app_configs, **kwargs):
+    if (
+        _security_middleware()
+        and settings.SECURE_CROSS_ORIGIN_OPENER_POLICY is not None
+        and settings.SECURE_CROSS_ORIGIN_OPENER_POLICY
+        not in CROSS_ORIGIN_OPENER_POLICY_VALUES
+    ):
+        return [E024]
+    return []

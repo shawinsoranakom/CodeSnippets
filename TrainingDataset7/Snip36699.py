@@ -1,0 +1,10 @@
+def setUp(self):
+        self.t = datetime.datetime(2007, 8, 14, 13, 46, 0)
+        self.onemicrosecond = datetime.timedelta(microseconds=1)
+        self.onesecond = datetime.timedelta(seconds=1)
+        self.oneminute = datetime.timedelta(minutes=1)
+        self.onehour = datetime.timedelta(hours=1)
+        self.oneday = datetime.timedelta(days=1)
+        self.oneweek = datetime.timedelta(days=7)
+        self.onemonth = datetime.timedelta(days=31)
+        self.oneyear = datetime.timedelta(days=366)

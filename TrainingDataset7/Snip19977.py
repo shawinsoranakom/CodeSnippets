@@ -1,0 +1,6 @@
+def debug_processor(request):
+    context = {
+        "debug_objects": DebugObject.objects,
+        "other_debug_objects": DebugObject.objects.using("other"),
+    }
+    return render(request, "context_processors/debug.html", context)

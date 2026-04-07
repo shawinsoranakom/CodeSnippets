@@ -1,0 +1,11 @@
+def test_char_field(self):
+        field = models.CharField(max_length=65)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.CharField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"max_length": 65})
+        field = models.CharField(max_length=65, null=True, blank=True)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.CharField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"max_length": 65, "null": True, "blank": True})

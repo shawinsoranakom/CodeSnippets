@@ -1,0 +1,11 @@
+def test_generic_ip_address_field(self):
+        field = models.GenericIPAddressField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.GenericIPAddressField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.GenericIPAddressField(protocol="IPv6")
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.GenericIPAddressField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"protocol": "IPv6"})

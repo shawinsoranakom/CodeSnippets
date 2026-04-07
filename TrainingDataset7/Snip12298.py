@@ -1,0 +1,23 @@
+def add_immediate_loading(self, field_names):
+        """
+        Add the given list of model field names to the set of fields to
+        retrieve when the SQL is executed ("immediate loading" fields). The
+        field names replace any existing immediate loading field names. If
+        there are field names already specified for deferred loading, remove
+        those names from the new field_names before storing the new names
+        for immediate loading. (That is, immediate loading overrides any
+        existing immediate values, but respects existing deferrals.)
+        """
+        existing, defer = self.deferred_loading
+        field_names = set(field_names)
+        if "pk" in field_names:
+            field_names.remove("pk")
+            field_names.add(self.get_meta().pk.name)
+
+        if defer:
+            # Remove any existing deferred names from the current set before
+            # setting the new names.
+            self.deferred_loading = field_names.difference(existing), False
+        else:
+            # Replace any existing "immediate load" field names.
+            self.deferred_loading = frozenset(field_names), False

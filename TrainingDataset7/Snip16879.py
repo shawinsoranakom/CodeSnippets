@@ -1,0 +1,11 @@
+def setUp(self):
+        super().setUp()
+        self.lisa = Student.objects.create(name="Lisa")
+        self.john = Student.objects.create(name="John")
+        self.bob = Student.objects.create(name="Bob")
+        self.peter = Student.objects.create(name="Peter")
+        self.jenny = Student.objects.create(name="Jenny")
+        self.jason = Student.objects.create(name="Jason")
+        self.cliff = Student.objects.create(name="Cliff")
+        self.arthur = Student.objects.create(name="Arthur")
+        self.school = School.objects.create(name="School of Awesome")

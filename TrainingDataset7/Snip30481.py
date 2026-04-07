@@ -1,0 +1,17 @@
+def test_union_with_different_models(self):
+        Celebrity.objects.create(name="Angel")
+        Celebrity.objects.create(name="Lionel")
+        Celebrity.objects.create(name="Emiliano")
+        Celebrity.objects.create(name="Demetrio")
+        Report.objects.create(name="Demetrio")
+        Report.objects.create(name="Daniel")
+        Report.objects.create(name="Javier")
+        expected = {"Angel", "Lionel", "Emiliano", "Demetrio", "Daniel", "Javier"}
+        qs1 = Celebrity.objects.values(alias=F("name"))
+        qs2 = Report.objects.values(alias_author=F("name"))
+        qs3 = qs1.union(qs2).values("name")
+        self.assertCountEqual((e["name"] for e in qs3), expected)
+        qs4 = qs1.union(qs2)
+        self.assertCountEqual((e["alias"] for e in qs4), expected)
+        qs5 = qs2.union(qs1)
+        self.assertCountEqual((e["alias_author"] for e in qs5), expected)

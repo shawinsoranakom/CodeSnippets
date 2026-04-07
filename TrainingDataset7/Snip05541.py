@@ -1,0 +1,29 @@
+def _check_raw_id_fields_item(self, obj, field_name, label):
+        """Check an item of `raw_id_fields`, i.e. check that field named
+        `field_name` exists in model `model` and is a ForeignKey or a
+        ManyToManyField."""
+
+        try:
+            field = obj.model._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            return refer_to_missing_field(
+                field=field_name, option=label, obj=obj, id="admin.E002"
+            )
+        else:
+            # Using attname is not supported.
+            if field.name != field_name:
+                return refer_to_missing_field(
+                    field=field_name,
+                    option=label,
+                    obj=obj,
+                    id="admin.E002",
+                )
+            if not field.many_to_many and not isinstance(field, models.ForeignKey):
+                return must_be(
+                    "a foreign key or a many-to-many field",
+                    option=label,
+                    obj=obj,
+                    id="admin.E003",
+                )
+            else:
+                return []

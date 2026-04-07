@@ -1,0 +1,10 @@
+def test_datetimes_save_completely(self):
+        dat = datetime.date(2014, 3, 12)
+        datetim = datetime.datetime(2014, 3, 12, 21, 22, 23, 240000)
+        tim = datetime.time(21, 22, 23, 240000)
+        DateTimeModel.objects.create(d=dat, dt=datetim, t=tim)
+        obj = DateTimeModel.objects.first()
+        self.assertTrue(obj)
+        self.assertEqual(obj.d, dat)
+        self.assertEqual(obj.dt, datetim)
+        self.assertEqual(obj.t, tim)

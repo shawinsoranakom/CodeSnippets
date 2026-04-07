@@ -1,0 +1,22 @@
+def test_generated_data(self):
+        "Permissions and content types are not created for a swapped model"
+
+        # Delete all permissions and content_types
+        Permission.objects.filter(content_type__app_label="swappable_models").delete()
+        ContentType.objects.filter(app_label="swappable_models").delete()
+
+        # Re-run migrate. This will re-build the permissions and content types.
+        management.call_command("migrate", interactive=False, verbosity=0)
+
+        # Content types and permissions exist for the swapped model,
+        # but not for the swappable model.
+        apps_models = [
+            (p.content_type.app_label, p.content_type.model)
+            for p in Permission.objects.all()
+        ]
+        self.assertIn(("swappable_models", "alternatearticle"), apps_models)
+        self.assertNotIn(("swappable_models", "article"), apps_models)
+
+        apps_models = [(ct.app_label, ct.model) for ct in ContentType.objects.all()]
+        self.assertIn(("swappable_models", "alternatearticle"), apps_models)
+        self.assertNotIn(("swappable_models", "article"), apps_models)

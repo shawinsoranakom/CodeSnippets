@@ -1,0 +1,3 @@
+def test_url21(self):
+        output = self.engine.render_to_string("url21", {"client": {"id": 1}})
+        self.assertEqual(output, "/client/1/!$&'()*+,;=~:@,/")

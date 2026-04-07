@@ -1,0 +1,5 @@
+def check_content_type_nosniff(app_configs, **kwargs):
+    passed_check = (
+        not _security_middleware() or settings.SECURE_CONTENT_TYPE_NOSNIFF is True
+    )
+    return [] if passed_check else [W006]

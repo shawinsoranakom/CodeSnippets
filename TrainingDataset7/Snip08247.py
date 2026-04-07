@@ -1,0 +1,3 @@
+def delete(self, key, version=None):
+        key = self.make_and_validate_key(key, version=version)
+        return self._base_delete_many([key])

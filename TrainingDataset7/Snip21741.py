@@ -1,0 +1,11 @@
+def test_date_field(self):
+        field = models.DateField()
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.DateField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {})
+        field = models.DateField(auto_now=True)
+        name, path, args, kwargs = field.deconstruct()
+        self.assertEqual(path, "django.db.models.DateField")
+        self.assertEqual(args, [])
+        self.assertEqual(kwargs, {"auto_now": True})

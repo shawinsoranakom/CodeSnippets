@@ -1,0 +1,11 @@
+def test_serialization_base(self):
+        geojson = serializers.serialize("geojson", City.objects.order_by("name"))
+        geodata = json.loads(geojson)
+        self.assertEqual(list(geodata.keys()), ["type", "features"])
+        self.assertEqual(geodata["type"], "FeatureCollection")
+        self.assertEqual(len(geodata["features"]), len(City.objects.all()))
+        self.assertEqual(geodata["features"][0]["geometry"]["type"], "Point")
+        self.assertEqual(geodata["features"][0]["properties"]["name"], "Chicago")
+        first_city = City.objects.order_by("name").first()
+        self.assertEqual(geodata["features"][0]["id"], first_city.pk)
+        self.assertEqual(geodata["features"][0]["properties"]["pk"], str(first_city.pk))

@@ -1,0 +1,14 @@
+def test_combofield_2(self):
+        f = ComboField(fields=[CharField(max_length=20), EmailField()], required=False)
+        self.assertEqual("test@example.com", f.clean("test@example.com"))
+        with self.assertRaisesMessage(
+            ValidationError,
+            "'Ensure this value has at most 20 characters (it has 28).'",
+        ):
+            f.clean("longemailaddress@example.com")
+        with self.assertRaisesMessage(
+            ValidationError, "'Enter a valid email address.'"
+        ):
+            f.clean("not an email")
+        self.assertEqual("", f.clean(""))
+        self.assertEqual("", f.clean(None))

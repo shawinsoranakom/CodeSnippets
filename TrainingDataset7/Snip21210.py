@@ -1,0 +1,2 @@
+def func(a, *, b=1, c=2):
+            return a, b, c

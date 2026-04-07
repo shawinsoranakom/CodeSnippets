@@ -1,0 +1,10 @@
+def test_auto_now_and_auto_now_add(self):
+        now = datetime.datetime.now()
+        past = now - datetime.timedelta(seconds=2)
+        future = now + datetime.timedelta(seconds=2)
+        Timestamp.objects.create()
+        ts = Timestamp.objects.get()
+        self.assertLess(past, ts.created)
+        self.assertLess(past, ts.updated)
+        self.assertGreater(future, ts.updated)
+        self.assertGreater(future, ts.updated)

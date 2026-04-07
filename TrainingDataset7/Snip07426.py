@@ -1,0 +1,4 @@
+def num_interior_rings(self):
+        "Return the number of interior rings."
+        # Getting the number of rings
+        return capi.get_nrings(self.ptr)

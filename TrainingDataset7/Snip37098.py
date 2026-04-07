@@ -1,0 +1,2 @@
+def callable():
+        raise Exception

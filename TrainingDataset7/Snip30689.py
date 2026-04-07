@@ -1,0 +1,11 @@
+def setUpTestData(cls):
+        generic = NamedCategory.objects.create(name="Generic")
+        cls.t1 = Tag.objects.create(name="t1", category=generic)
+        cls.t2 = Tag.objects.create(name="t2", parent=cls.t1, category=generic)
+        cls.t3 = Tag.objects.create(name="t3", parent=cls.t1)
+        cls.t4 = Tag.objects.create(name="t4", parent=cls.t3)
+        cls.t5 = Tag.objects.create(name="t5", parent=cls.t3)
+        n1 = Note.objects.create(note="n1", misc="foo", id=1)
+        cls.ann1 = Annotation.objects.create(name="a1", tag=cls.t1)
+        cls.ann1.notes.add(n1)
+        cls.ann2 = Annotation.objects.create(name="a2", tag=cls.t4)

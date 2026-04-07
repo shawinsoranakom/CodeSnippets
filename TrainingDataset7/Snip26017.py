@@ -1,0 +1,12 @@
+def setUpTestData(cls):
+        cls.alice = Person.objects.create(name="Alice")
+        cls.bob = Person.objects.create(name="Bob")
+        cls.chris = Person.objects.create(name="Chris")
+        cls.dan = Person.objects.create(name="Dan")
+        cls.team_alpha = Group.objects.create(name="Alpha")
+        Membership.objects.create(person=cls.alice, group=cls.team_alpha)
+        Membership.objects.create(person=cls.bob, group=cls.team_alpha)
+        cls.event = Event.objects.create(name="Exposition Match")
+        IndividualCompetitor.objects.create(event=cls.event, person=cls.chris)
+        IndividualCompetitor.objects.create(event=cls.event, person=cls.dan)
+        CompetingTeam.objects.create(event=cls.event, team=cls.team_alpha)

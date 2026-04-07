@@ -1,0 +1,11 @@
+def test_rename_column_references(self):
+        self.reference.rename_column_references("other", "first_column", "third_column")
+        self.assertIs(self.reference.references_column("table", "first_column"), True)
+        self.assertIs(self.reference.references_column("table", "third_column"), False)
+        self.assertIs(self.reference.references_column("other", "third_column"), False)
+        self.reference.rename_column_references("table", "third_column", "first_column")
+        self.assertIs(self.reference.references_column("table", "first_column"), True)
+        self.assertIs(self.reference.references_column("table", "third_column"), False)
+        self.reference.rename_column_references("table", "first_column", "third_column")
+        self.assertIs(self.reference.references_column("table", "first_column"), False)
+        self.assertIs(self.reference.references_column("table", "third_column"), True)
