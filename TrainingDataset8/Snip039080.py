@@ -1,0 +1,4 @@
+def test_invalid_value_range(self):
+        """Test that value must be within the length of the options."""
+        with self.assertRaises(StreamlitAPIException):
+            st.selectbox("the label", ("m", "f"), 2)

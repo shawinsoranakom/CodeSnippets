@@ -1,0 +1,4 @@
+def test_invalid_value(self):
+        """Test that value must be an int."""
+        with self.assertRaises(StreamlitAPIException):
+            st.selectbox("the label", ("m", "f"), "1")

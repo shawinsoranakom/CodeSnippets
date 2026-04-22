@@ -1,0 +1,84 @@
+def pydeck_chart(
+        self,
+        pydeck_obj: Optional["Deck"] = None,
+        use_container_width: bool = False,
+    ) -> "DeltaGenerator":
+        """Draw a chart using the PyDeck library.
+
+        This supports 3D maps, point clouds, and more! More info about PyDeck
+        at https://deckgl.readthedocs.io/en/latest/.
+
+        These docs are also quite useful:
+
+        - DeckGL docs: https://github.com/uber/deck.gl/tree/master/docs
+        - DeckGL JSON docs: https://github.com/uber/deck.gl/tree/master/modules/json
+
+        When using this command, we advise all users to use a personal Mapbox
+        token. This ensures the map tiles used in this chart are more
+        robust. You can do this with the mapbox.token config option.
+
+        To get a token for yourself, create an account at
+        https://mapbox.com. It's free! (for moderate usage levels). For more info
+        on how to set config options, see
+        https://docs.streamlit.io/library/advanced-features/configuration#set-configuration-options
+
+        Parameters
+        ----------
+        pydeck_obj: pydeck.Deck or None
+            Object specifying the PyDeck chart to draw.
+        use_container_width: bool
+
+        Example
+        -------
+        Here's a chart using a HexagonLayer and a ScatterplotLayer. It uses either the
+        light or dark map style, based on which Streamlit theme is currently active:
+
+        >>> import pandas as pd
+        >>> import numpy as np
+        >>> import pydeck as pdk
+        >>>
+        >>> chart_data = pd.DataFrame(
+        ...    np.random.randn(1000, 2) / [50, 50] + [37.76, -122.4],
+        ...    columns=['lat', 'lon'])
+        >>>
+        >>> st.pydeck_chart(pdk.Deck(
+        ...     map_style=None,
+        ...     initial_view_state=pdk.ViewState(
+        ...         latitude=37.76,
+        ...         longitude=-122.4,
+        ...         zoom=11,
+        ...         pitch=50,
+        ...     ),
+        ...     layers=[
+        ...         pdk.Layer(
+        ...            'HexagonLayer',
+        ...            data=chart_data,
+        ...            get_position='[lon, lat]',
+        ...            radius=200,
+        ...            elevation_scale=4,
+        ...            elevation_range=[0, 1000],
+        ...            pickable=True,
+        ...            extruded=True,
+        ...         ),
+        ...         pdk.Layer(
+        ...             'ScatterplotLayer',
+        ...             data=chart_data,
+        ...             get_position='[lon, lat]',
+        ...             get_color='[200, 30, 0, 160]',
+        ...             get_radius=200,
+        ...         ),
+        ...     ],
+        ... ))
+
+        .. output::
+           https://doc-pydeck-chart.streamlitapp.com/
+           height: 530px
+
+        .. note::
+           To make the PyDeck chart's style consistent with Streamlit's theme,
+           you can set ``map_style=None`` in the ``pydeck.Deck`` object.
+
+        """
+        pydeck_proto = PydeckProto()
+        marshall(pydeck_proto, pydeck_obj, use_container_width)
+        return self.dg._enqueue("deck_gl_json_chart", pydeck_proto)
