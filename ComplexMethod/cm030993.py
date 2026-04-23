@@ -1,0 +1,54 @@
+def run(self, result=None):
+        if result is None:
+            result = test_case.defaultTestResult()
+            startTestRun = getattr(result, 'startTestRun', None)
+            stopTestRun = getattr(result, 'stopTestRun', None)
+            if startTestRun is not None:
+                startTestRun()
+        else:
+            stopTestRun = None
+
+        # Called at the beginning of each test. See TestCase.run.
+        result.startTest(self)
+
+        cases = [copy.copy(self.test_case) for _ in range(self.num_threads)]
+        results = [unittest.TestResult() for _ in range(self.num_threads)]
+
+        barrier = threading.Barrier(self.num_threads)
+        threads = []
+        for i, (case, r) in enumerate(zip(cases, results)):
+            thread = threading.Thread(target=self.run_worker,
+                                      args=(case, r, barrier),
+                                      name=f"{str(self.test_case)}-{i}",
+                                      daemon=True)
+            threads.append(thread)
+
+        for thread in threads:
+            thread.start()
+
+        for threads in threads:
+            threads.join()
+
+        # Aggregate test results
+        if all(r.wasSuccessful() for r in results):
+            result.addSuccess(self)
+
+        # Note: We can't call result.addError, result.addFailure, etc. because
+        # we no longer have the original exception, just the string format.
+        for r in results:
+            if len(r.errors) > 0 or len(r.failures) > 0:
+                result._mirrorOutput = True
+            result.errors.extend(r.errors)
+            result.failures.extend(r.failures)
+            result.skipped.extend(r.skipped)
+            result.expectedFailures.extend(r.expectedFailures)
+            result.unexpectedSuccesses.extend(r.unexpectedSuccesses)
+            result.collectedDurations.extend(r.collectedDurations)
+
+        if any(r.shouldStop for r in results):
+            result.stop()
+
+        # Test has finished running
+        result.stopTest(self)
+        if stopTestRun is not None:
+            stopTestRun()

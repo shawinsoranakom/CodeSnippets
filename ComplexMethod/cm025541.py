@@ -1,0 +1,58 @@
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old entry."""
+
+    _LOGGER.debug(
+        "Migrating configuration from version %s.%s",
+        config_entry.version,
+        config_entry.minor_version,
+    )
+
+    if config_entry.version > 1:
+        # This means the user has downgraded from a future version
+        return False
+
+    if config_entry.version == 1:
+        if config_entry.minor_version < 2:
+            new_options = {**config_entry.options}
+
+            if new_options.get("unit_prefix") == "none":
+                # Before we had support for optional selectors, "none" was used for selecting nothing
+                del new_options["unit_prefix"]
+
+            hass.config_entries.async_update_entry(
+                config_entry, options=new_options, version=1, minor_version=2
+            )
+
+        if config_entry.minor_version < 3:
+            # Remove the derivative config entry from the source device
+            if source_device_id := async_entity_id_to_device_id(
+                hass, config_entry.options[CONF_SOURCE]
+            ):
+                async_remove_helper_config_entry_from_source_device(
+                    hass,
+                    helper_config_entry_id=config_entry.entry_id,
+                    source_device_id=source_device_id,
+                )
+            hass.config_entries.async_update_entry(
+                config_entry, version=1, minor_version=3
+            )
+
+        if config_entry.minor_version < 4:
+            # Ensure we use the correct units
+            new_options = {**config_entry.options}
+
+            if new_options.get("unit_prefix") == "\u00b5":
+                # Ensure we use the preferred coding of μ
+                new_options["unit_prefix"] = "\u03bc"
+
+            hass.config_entries.async_update_entry(
+                config_entry, options=new_options, version=1, minor_version=4
+            )
+
+    _LOGGER.debug(
+        "Migration to configuration version %s.%s successful",
+        config_entry.version,
+        config_entry.minor_version,
+    )
+
+    return True

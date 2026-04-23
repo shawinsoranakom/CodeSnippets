@@ -1,0 +1,27 @@
+def serializer_factory(value):
+    if isinstance(value, Promise):
+        value = str(value)
+    elif isinstance(value, LazyObject):
+        # The unwrapped value is returned as the first item of the arguments
+        # tuple.
+        value = value.__reduce__()[1][0]
+
+    if isinstance(value, models.Field):
+        return ModelFieldSerializer(value)
+    if isinstance(value, models.manager.BaseManager):
+        return ModelManagerSerializer(value)
+    if isinstance(value, Operation):
+        return OperationSerializer(value)
+    if isinstance(value, type):
+        return TypeSerializer(value)
+    # Anything that knows how to deconstruct itself.
+    if hasattr(value, "deconstruct"):
+        return DeconstructibleSerializer(value)
+    for type_, serializer_cls in Serializer._registry.items():
+        if isinstance(value, type_):
+            return serializer_cls(value)
+    raise ValueError(
+        "Cannot serialize: %r\nThere are some values Django cannot serialize into "
+        "migration files.\nFor more, see https://docs.djangoproject.com/en/%s/"
+        "topics/migrations/#migration-serializing" % (value, get_docs_version())
+    )

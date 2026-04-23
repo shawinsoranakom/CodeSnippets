@@ -1,0 +1,40 @@
+def create_default_local_load_plan(
+    state_dict: dict[str, Any], metadata: Metadata, strict: bool = True
+) -> LoadPlan:
+    requests = []
+    """
+    Create the ``LoadPlan`` used by DefaultLoadPlanner.
+
+    It produces one read item per value in ``state_dict`` using the metadata in ``metadata``.
+
+    The default behavior is to match key exactly between state_dict and metadata.
+    It handles resharding by issuing multiple read requests against storage in order to match
+    load requirements.
+    """
+
+    for fqn, obj in state_dict.items():
+        # ignore state_dict keys which do not exist in `state_dict` if strict=False
+        if fqn not in metadata.state_dict_metadata:
+            if strict:
+                raise RuntimeError(f"Missing key in checkpoint state_dict: {fqn}.")
+            else:
+                continue
+
+        md = metadata.state_dict_metadata[fqn]
+        if (
+            isinstance(md, TensorStorageMetadata)
+            and getattr(obj, "size", None) is not None
+            and md.size != obj.size()
+        ):
+            raise ValueError(
+                f"Size mismatch between saved {md.size} and current: {obj.size()} for {fqn}",
+            )
+        # Since DTensor supports submesh, adding extra check to ensure _create_read_items()
+        # gets called only when the current rank is part of the mesh for the corresponding DTensor.
+        if isinstance(obj, DTensor):
+            if obj.device_mesh.get_coordinate() is not None:
+                requests += _create_read_items(fqn, md, obj)
+        else:
+            requests += _create_read_items(fqn, md, obj)
+
+    return LoadPlan(requests)

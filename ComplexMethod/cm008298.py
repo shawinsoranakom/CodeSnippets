@@ -1,0 +1,46 @@
+def _real_extract(self, url):
+        video_id = self._match_id(url)
+        webpage = self._download_webpage(url, video_id)
+        video_data = self._parse_json(self._search_regex(
+            r"data-opts='({.+?})'", webpage, 'video data'), video_id)
+        title = unescapeHTML(video_data['title'])
+
+        sources_url = (try_get(
+            video_data,
+            (lambda x: x['plugins']['sources']['url'],
+             lambda x: x['sources']['url']), str)
+            or f'http://www.dailymail.co.uk/api/player/{video_id}/video-sources.json')
+
+        video_sources = self._download_json(sources_url, video_id)
+        body = video_sources.get('body')
+        if body:
+            video_sources = body
+
+        formats = []
+        for rendition in video_sources['renditions']:
+            rendition_url = rendition.get('url')
+            if not rendition_url:
+                continue
+            tbr = int_or_none(rendition.get('encodingRate'), 1000)
+            container = rendition.get('videoContainer')
+            is_hls = container == 'M2TS'
+            protocol = 'm3u8_native' if is_hls else determine_protocol({'url': rendition_url})
+            formats.append({
+                'format_id': join_nonempty('hls' if is_hls else protocol, tbr),
+                'url': rendition_url,
+                'width': int_or_none(rendition.get('frameWidth')),
+                'height': int_or_none(rendition.get('frameHeight')),
+                'tbr': tbr,
+                'vcodec': rendition.get('videoCodec'),
+                'container': container,
+                'protocol': protocol,
+                'ext': 'mp4' if is_hls else None,
+            })
+
+        return {
+            'id': video_id,
+            'title': title,
+            'description': unescapeHTML(video_data.get('descr')),
+            'thumbnail': video_data.get('poster') or video_data.get('thumbnail'),
+            'formats': formats,
+        }

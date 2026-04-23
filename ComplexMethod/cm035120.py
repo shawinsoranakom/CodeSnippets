@@ -1,0 +1,90 @@
+def load_funsd_label(image_dir, anno_dir):
+    imgs = os.listdir(image_dir)
+    annos = os.listdir(anno_dir)
+
+    imgs = [img.replace(".png", "") for img in imgs]
+    annos = [anno.replace(".json", "") for anno in annos]
+
+    fn_info_map = dict()
+    for anno_fn in annos:
+        res = []
+        with open(os.path.join(anno_dir, anno_fn + ".json"), "r") as fin:
+            infos = json.load(fin)
+            infos = infos["form"]
+            old_id2new_id_map = dict()
+            global_new_id = 0
+            for info in infos:
+                if info["text"] is None:
+                    continue
+                words = info["words"]
+                if len(words) <= 0:
+                    continue
+                word_idx = 1
+                curr_bboxes = [words[0]["box"]]
+                curr_texts = [words[0]["text"]]
+                while word_idx < len(words):
+                    # switch to a new link
+                    if words[word_idx]["box"][0] + 10 <= words[word_idx - 1]["box"][2]:
+                        if len("".join(curr_texts[0])) > 0:
+                            res.append(
+                                {
+                                    "transcription": " ".join(curr_texts),
+                                    "label": info["label"],
+                                    "points": get_outer_poly(curr_bboxes),
+                                    "linking": info["linking"],
+                                    "id": global_new_id,
+                                }
+                            )
+                            if info["id"] not in old_id2new_id_map:
+                                old_id2new_id_map[info["id"]] = []
+                            old_id2new_id_map[info["id"]].append(global_new_id)
+                            global_new_id += 1
+                        curr_bboxes = [words[word_idx]["box"]]
+                        curr_texts = [words[word_idx]["text"]]
+                    else:
+                        curr_bboxes.append(words[word_idx]["box"])
+                        curr_texts.append(words[word_idx]["text"])
+                    word_idx += 1
+                if len("".join(curr_texts[0])) > 0:
+                    res.append(
+                        {
+                            "transcription": " ".join(curr_texts),
+                            "label": info["label"],
+                            "points": get_outer_poly(curr_bboxes),
+                            "linking": info["linking"],
+                            "id": global_new_id,
+                        }
+                    )
+                    if info["id"] not in old_id2new_id_map:
+                        old_id2new_id_map[info["id"]] = []
+                    old_id2new_id_map[info["id"]].append(global_new_id)
+                    global_new_id += 1
+            res = sorted(res, key=lambda r: (r["points"][0][1], r["points"][0][0]))
+            for i in range(len(res) - 1):
+                for j in range(i, 0, -1):
+                    if abs(
+                        res[j + 1]["points"][0][1] - res[j]["points"][0][1]
+                    ) < 20 and (res[j + 1]["points"][0][0] < res[j]["points"][0][0]):
+                        tmp = deepcopy(res[j])
+                        res[j] = deepcopy(res[j + 1])
+                        res[j + 1] = deepcopy(tmp)
+                    else:
+                        break
+            # re-generate unique ids
+            for idx, r in enumerate(res):
+                new_links = []
+                for link in r["linking"]:
+                    # illegal links will be removed
+                    if (
+                        link[0] not in old_id2new_id_map
+                        or link[1] not in old_id2new_id_map
+                    ):
+                        continue
+                    for src in old_id2new_id_map[link[0]]:
+                        for dst in old_id2new_id_map[link[1]]:
+                            new_links.append([src, dst])
+                res[idx]["linking"] = deepcopy(new_links)
+
+            fn_info_map[anno_fn] = res
+
+    return fn_info_map

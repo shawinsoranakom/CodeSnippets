@@ -1,0 +1,107 @@
+def perspective_transform(
+    images,
+    start_points,
+    end_points,
+    interpolation="bilinear",
+    fill_value=0,
+    data_format=None,
+):
+    data_format = backend.standardize_data_format(data_format)
+    start_points = convert_to_tensor(start_points)
+    end_points = convert_to_tensor(end_points)
+
+    if interpolation not in AFFINE_TRANSFORM_INTERPOLATIONS:
+        raise ValueError(
+            "Invalid value for argument `interpolation`. Expected of one "
+            f"{AFFINE_TRANSFORM_INTERPOLATIONS}. Received: "
+            f"interpolation={interpolation}"
+        )
+
+    if len(images.shape) not in (3, 4):
+        raise ValueError(
+            "Invalid images rank: expected rank 3 (single image) "
+            "or rank 4 (batch of images). Received input with shape: "
+            f"images.shape={images.shape}"
+        )
+
+    if start_points.ndim not in (2, 3) or start_points.shape[-2:] != (4, 2):
+        raise ValueError(
+            "Invalid start_points shape: expected (4,2) for a single image"
+            f" or (N,4,2) for a batch. Received shape: {start_points.shape}"
+        )
+    if end_points.ndim not in (2, 3) or end_points.shape[-2:] != (4, 2):
+        raise ValueError(
+            "Invalid end_points shape: expected (4,2) for a single image"
+            f" or (N,4,2) for a batch. Received shape: {end_points.shape}"
+        )
+    if start_points.shape != end_points.shape:
+        raise ValueError(
+            "start_points and end_points must have the same shape."
+            f" Received start_points.shape={start_points.shape}, "
+            f"end_points.shape={end_points.shape}"
+        )
+
+    input_dtype = images.dtype
+    if input_dtype == "float16":
+        images = images.astype("float32")
+
+    need_squeeze = False
+    if len(images.shape) == 3:
+        images = np.expand_dims(images, axis=0)
+        need_squeeze = True
+
+    if len(start_points.shape) == 2:
+        start_points = np.expand_dims(start_points, axis=0)
+    if len(end_points.shape) == 2:
+        end_points = np.expand_dims(end_points, axis=0)
+
+    if data_format == "channels_first":
+        images = np.transpose(images, (0, 2, 3, 1))
+
+    batch_size, height, width, channels = images.shape
+
+    transforms = compute_homography_matrix(start_points, end_points)
+
+    if len(transforms.shape) == 1:
+        transforms = np.expand_dims(transforms, axis=0)
+    if transforms.shape[0] == 1 and batch_size > 1:
+        transforms = np.tile(transforms, (batch_size, 1))
+
+    x, y = np.meshgrid(
+        np.arange(width, dtype=np.float32),
+        np.arange(height, dtype=np.float32),
+        indexing="xy",
+    )
+
+    output = np.empty((batch_size, height, width, channels))
+
+    for i in range(batch_size):
+        a0, a1, a2, a3, a4, a5, a6, a7 = transforms[i]
+        denom = a6 * x + a7 * y + 1.0
+        x_in = (a0 * x + a1 * y + a2) / denom
+        y_in = (a3 * x + a4 * y + a5) / denom
+
+        coords = np.stack([y_in.ravel(), x_in.ravel()], axis=0)
+
+        mapped_channels = []
+        for channel in range(channels):
+            channel_img = images[i, :, :, channel]
+
+            mapped_channel = map_coordinates(
+                channel_img,
+                coords,
+                order=AFFINE_TRANSFORM_INTERPOLATIONS[interpolation],
+                fill_mode="constant",
+                fill_value=fill_value,
+            )
+            mapped_channels.append(mapped_channel.reshape(height, width))
+
+        output[i] = np.stack(mapped_channels, axis=-1)
+
+    if data_format == "channels_first":
+        output = np.transpose(output, (0, 3, 1, 2))
+    if need_squeeze:
+        output = np.squeeze(output, axis=0)
+    output = output.astype(input_dtype)
+
+    return output

@@ -1,0 +1,93 @@
+async def test_migrate_entry_from_v3_2(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    entity_registry: er.EntityRegistry,
+    config_entry_disabled_by: ConfigEntryDisabler | None,
+    device_disabled_by: DeviceEntryDisabler | None,
+    entity_disabled_by: RegistryEntryDisabler | None,
+    setup_result: bool,
+    minor_version_after_migration: int,
+    config_entry_disabled_by_after_migration: ConfigEntryDisabler | None,
+    device_disabled_by_after_migration: ConfigEntryDisabler | None,
+    entity_disabled_by_after_migration: RegistryEntryDisabler | None,
+) -> None:
+    """Test migration from version 3.2."""
+    # Create a v3.2 config entry with conversation subentries
+    conversation_subentry_id = "blabla"
+    mock_config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_URL: "http://localhost:11434"},
+        disabled_by=config_entry_disabled_by,
+        version=3,
+        minor_version=2,
+        subentries_data=[
+            {
+                "data": V1_TEST_OPTIONS,
+                "subentry_id": conversation_subentry_id,
+                "subentry_type": "conversation",
+                "title": "Ollama",
+                "unique_id": None,
+            },
+            {
+                "data": {"model": "llama3.2:latest"},
+                "subentry_type": "ai_task_data",
+                "title": "Ollama AI Task",
+                "unique_id": None,
+            },
+        ],
+    )
+    mock_config_entry.add_to_hass(hass)
+
+    conversation_device = device_registry.async_get_or_create(
+        config_entry_id=mock_config_entry.entry_id,
+        config_subentry_id=conversation_subentry_id,
+        disabled_by=device_disabled_by,
+        identifiers={(DOMAIN, mock_config_entry.entry_id)},
+        name=mock_config_entry.title,
+        manufacturer="Ollama",
+        model="Ollama",
+        entry_type=dr.DeviceEntryType.SERVICE,
+    )
+    conversation_entity = entity_registry.async_get_or_create(
+        "conversation",
+        DOMAIN,
+        mock_config_entry.entry_id,
+        config_entry=mock_config_entry,
+        config_subentry_id=conversation_subentry_id,
+        disabled_by=entity_disabled_by,
+        device_id=conversation_device.id,
+        suggested_object_id="ollama",
+    )
+
+    # Verify initial state
+    assert mock_config_entry.version == 3
+    assert mock_config_entry.minor_version == 2
+    assert len(mock_config_entry.subentries) == 2
+    assert mock_config_entry.disabled_by == config_entry_disabled_by
+    assert conversation_device.disabled_by == device_disabled_by
+    assert conversation_entity.disabled_by == entity_disabled_by
+
+    # Run setup to trigger migration
+    with patch(
+        "homeassistant.components.ollama.async_setup_entry",
+        return_value=True,
+    ):
+        result = await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        assert result is setup_result
+        await hass.async_block_till_done()
+
+    # Verify migration completed
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    entry = entries[0]
+
+    # Check version and subversion were updated
+    assert entry.version == 3
+    assert entry.minor_version == minor_version_after_migration
+
+    # Check the disabled_by flag on config entry, device and entity are as expected
+    conversation_device = device_registry.async_get(conversation_device.id)
+    conversation_entity = entity_registry.async_get(conversation_entity.entity_id)
+    assert mock_config_entry.disabled_by == config_entry_disabled_by_after_migration
+    assert conversation_device.disabled_by == device_disabled_by_after_migration
+    assert conversation_entity.disabled_by == entity_disabled_by_after_migration

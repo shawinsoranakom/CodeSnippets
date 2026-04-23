@@ -1,0 +1,33 @@
+def get_and_set_online_payments_data(self, next_online_payment_amount=False):
+        """ Allows to update the amount to pay for the next online payment and
+            get online payments already made and how much remains to be paid.
+            If next_online_payment_amount is different than False, updates the
+            next online payment amount, otherwise, the next online payment amount
+            is unchanged.
+            If next_online_payment_amount is 0 and the order has no successful
+            online payment, is in draft state, is not a restaurant order and the
+            pos.config has no trusted config, then the order is deleted from the
+            database, because it was probably added for the online payment flow.
+        """
+        self.ensure_one()
+        is_paid = self.state in ('paid', 'done')
+        if is_paid:
+            return {
+                'id': self.id,
+                'paid_order': self.read([], load=False)
+            }
+
+        online_payments = self.sudo().env['pos.payment'].search_read(domain=['&', ('pos_order_id', '=', self.id), ('online_account_payment_id', '!=', False)], fields=['payment_method_id', 'amount'], load=False)
+        return_data = {
+            'id': self.id,
+            'online_payments': online_payments,
+            'amount_unpaid': self.get_amount_unpaid(),
+        }
+        if not isinstance(next_online_payment_amount, bool):
+            if tools.float_is_zero(next_online_payment_amount, precision_rounding=self.currency_id.rounding) and len(online_payments) == 0 and self.state == 'draft' and not self.config_id.module_pos_restaurant and len(self.config_id.trusted_config_ids) == 0:
+                self.sudo()._clean_payment_lines() # Needed to delete the order
+                return_data['deleted'] = True
+            elif self._check_next_online_payment_amount(next_online_payment_amount):
+                self.next_online_payment_amount = next_online_payment_amount
+
+        return return_data

@@ -1,0 +1,55 @@
+def vt_identity_compare(
+    left: VariableTracker,
+    right: VariableTracker,
+) -> "VariableTracker | None":
+    """Try to determine Python identity (left is right) at trace time.
+
+    Returns ConstantVariable(True/False) if determinable, else None.
+    Mirrors the logic in BuiltinVariable's handle_is handler.
+    """
+    if left is right:
+        return ConstantVariable.create(True)
+
+    left_val = left.get_real_python_backed_value()
+    right_val = right.get_real_python_backed_value()
+    left_known = left_val is not NO_SUCH_SUBOBJ
+    right_known = right_val is not NO_SUCH_SUBOBJ
+
+    if left_known and right_known:
+        return (
+            ConstantVariable.create(True)
+            if left_val is right_val
+            else ConstantVariable.create(False)
+        )
+
+    # One side has a concrete backing object, the other doesn't — they can't
+    # be the same object.
+    if left_known != right_known:
+        return ConstantVariable.create(False)
+
+    # Mutable containers created during tracing: VT identity = Python identity.
+    from .dicts import ConstDictVariable
+    from .lists import ListVariable
+    from .sets import SetVariable
+
+    if isinstance(left, (ConstDictVariable, ListVariable, SetVariable)):
+        return ConstantVariable.create(False)
+
+    # Different Python types can never be the same object.
+    try:
+        if left.python_type() is not right.python_type():
+            return ConstantVariable.create(False)
+    except NotImplementedError:
+        pass
+
+    # Different exception types are never identical.
+    from .. import variables
+
+    if (
+        istype(left, variables.ExceptionVariable)
+        and istype(right, variables.ExceptionVariable)
+        and left.exc_type is not right.exc_type  # type: ignore[attr-defined]
+    ):
+        return ConstantVariable.create(False)
+
+    return None

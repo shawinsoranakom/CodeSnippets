@@ -1,0 +1,58 @@
+async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        """Broadcast a message."""
+        hass = intent_obj.hass
+        ent_reg = er.async_get(hass)
+
+        # Find all assist satellite entities that are not the one invoking the intent
+        entities: dict[str, er.RegistryEntry] = {}
+        for entity in hass.states.async_entity_ids(DOMAIN):
+            entry = ent_reg.async_get(entity)
+            if (
+                (entry is None)
+                or (
+                    # Supports announce
+                    not (
+                        entry.supported_features & AssistSatelliteEntityFeature.ANNOUNCE
+                    )
+                )
+                # Not the invoking device
+                or (intent_obj.device_id and (entry.device_id == intent_obj.device_id))
+            ):
+                # Skip satellite
+                continue
+
+            # Check domain of config entry against excluded domains
+            if (
+                entry.config_entry_id
+                and (
+                    config_entry := hass.config_entries.async_get_entry(
+                        entry.config_entry_id
+                    )
+                )
+                and (config_entry.domain in EXCLUDED_DOMAINS)
+            ):
+                continue
+
+            entities[entity] = entry
+
+        await hass.services.async_call(
+            DOMAIN,
+            "announce",
+            {"message": intent_obj.slots["message"]["value"]},
+            blocking=True,
+            context=intent_obj.context,
+            target={"entity_id": list(entities)},
+        )
+
+        response = intent_obj.create_response()
+        response.async_set_results(
+            success_results=[
+                intent.IntentResponseTarget(
+                    type=intent.IntentResponseTargetType.ENTITY,
+                    id=entity,
+                    name=state.name if (state := hass.states.get(entity)) else entity,
+                )
+                for entity in entities
+            ]
+        )
+        return response

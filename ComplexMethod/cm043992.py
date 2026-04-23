@@ -1,0 +1,102 @@
+def transform_data(
+        query: SAForwardEpsEstimatesQueryParams,
+        data: dict,
+        **kwargs: Any,
+    ) -> list[SAForwardEpsEstimatesData]:
+        """Transform the data to the standard format."""
+        tickers = query.symbol.split(",")  # type: ignore
+        ids = data.get("ids", {})
+        estimates = data.get("estimates", {})
+        results: list[SAForwardEpsEstimatesData] = []
+        for ticker in tickers:
+            sa_id = str(ids.get(ticker, ""))
+            if sa_id == "" or sa_id not in estimates:
+                warn(f"Symbol Error: No data found for, {ticker}")
+                continue
+
+            seek_object = estimates.get(sa_id, {})
+            if not seek_object:
+                warn(f"No data found for {ticker}")
+                continue
+            items = len(seek_object.get("eps_normalized_num_of_estimates"))
+            if not items:
+                warn(f"No data found for {ticker}")
+                continue
+            for i in range(0, items - 4):
+                eps_estimates: dict = {}
+                eps_estimates["symbol"] = ticker
+                num_estimates = seek_object["eps_normalized_num_of_estimates"].get(
+                    str(i)
+                )
+                if not num_estimates:
+                    continue
+                period = num_estimates[0].get("period", {})
+                if period:
+                    period_type = period.get("periodtypeid")
+                    eps_estimates["calendar_year"] = period.get("calendaryear")
+                    eps_estimates["calendar_period"] = (
+                        "Q" + str(period.get("calendarquarter", ""))
+                        if period_type == "quarterly"
+                        else "FY"
+                    )
+                    eps_estimates["date"] = period.get("periodenddate").split("T")[0]
+                    eps_estimates["fiscal_year"] = period.get("fiscalyear")
+                    eps_estimates["fiscal_period"] = (
+                        "Q" + str(period.get("fiscalquarter", ""))
+                        if period_type == "quarterly"
+                        else "FY"
+                    )
+                eps_estimates["number_of_analysts"] = num_estimates[0].get(
+                    "dataitemvalue"
+                )
+                actual = seek_object["eps_normalized_actual"].get(str(i))
+                if actual:
+                    eps_estimates["normalized_actual"] = actual[0].get("dataitemvalue")
+                gaap_actual = seek_object["eps_gaap_actual"].get(str(i))
+                if gaap_actual:
+                    eps_estimates["gaap_actual"] = gaap_actual[0].get("dataitemvalue")
+                low = seek_object["eps_normalized_consensus_low"].get(str(i))
+                if low:
+                    eps_estimates["low_estimate"] = low[0].get("dataitemvalue")
+                gaap_low = seek_object["eps_gaap_consensus_low"].get(str(i))
+                if gaap_low:
+                    eps_estimates["low_estimate_gaap"] = gaap_low[0].get(
+                        "dataitemvalue"
+                    )
+                high = seek_object["eps_normalized_consensus_high"].get(str(i))
+                if high:
+                    eps_estimates["high_estimate"] = high[0].get("dataitemvalue")
+                gaap_high = seek_object["eps_gaap_consensus_high"].get(str(i))
+                if gaap_high:
+                    eps_estimates["high_estimate_gaap"] = gaap_high[0].get(
+                        "dataitemvalue"
+                    )
+                mean = seek_object["eps_normalized_consensus_mean"].get(str(i))
+                if mean:
+                    mean = mean[0].get("dataitemvalue")
+                    eps_estimates["mean"] = mean
+                gaap_mean = seek_object["eps_gaap_consensus_mean"].get(str(i))
+                if gaap_mean:
+                    eps_estimates["mean_gaap"] = gaap_mean[0].get("dataitemvalue")
+                # Calculate the estimated growth percent.
+                this = float(mean) if mean else None
+                prev = None
+                percent = None
+                try:
+                    prev = float(
+                        seek_object["eps_normalized_actual"][str(i - 1)][0].get(
+                            "dataitemvalue"
+                        )
+                    )
+                except KeyError:
+                    prev = float(
+                        seek_object["eps_normalized_consensus_mean"][str(i - 1)][0].get(
+                            "dataitemvalue"
+                        )
+                    )
+                if this and prev:
+                    percent = (this - prev) / prev
+                eps_estimates["period_growth"] = percent
+                results.append(SAForwardEpsEstimatesData.model_validate(eps_estimates))
+
+        return results

@@ -1,0 +1,74 @@
+async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the user step to pick discovered device."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            address = user_input[CONF_ADDRESS]
+            discovery_info = self._discovered_devices[address]
+            await self.async_set_unique_id(
+                format_mac(discovery_info.address), raise_on_progress=False
+            )
+            self._abort_if_unique_id_configured()
+            glow = CasperGlow(discovery_info.device)
+            try:
+                await glow.handshake()
+            except CasperGlowError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception(
+                    "Unexpected error during Casper Glow config flow "
+                    "(step=user, address=%s)",
+                    discovery_info.address,
+                )
+                errors["base"] = "unknown"
+            else:
+                return self.async_create_entry(
+                    title=human_readable_name(
+                        None, discovery_info.name, discovery_info.address
+                    ),
+                    data={
+                        CONF_ADDRESS: discovery_info.address,
+                    },
+                )
+
+        if discovery := self._discovery_info:
+            self._discovered_devices[discovery.address] = discovery
+        else:
+            current_addresses = self._async_current_ids(include_ignore=False)
+            for discovery in async_discovered_service_info(self.hass):
+                if (
+                    format_mac(discovery.address) in current_addresses
+                    or discovery.address in self._discovered_devices
+                    or not (
+                        discovery.name
+                        and any(
+                            discovery.name.startswith(local_name)
+                            for local_name in LOCAL_NAMES
+                        )
+                    )
+                ):
+                    continue
+                self._discovered_devices[discovery.address] = discovery
+
+        if not self._discovered_devices:
+            return self.async_abort(reason="no_devices_found")
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_ADDRESS): vol.In(
+                    {
+                        service_info.address: human_readable_name(
+                            None, service_info.name, service_info.address
+                        )
+                        for service_info in self._discovered_devices.values()
+                    }
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )

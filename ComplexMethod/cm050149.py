@@ -1,0 +1,33 @@
+def geo_localize(self):
+        # We need country names in English below
+        if not self.env.context.get('force_geo_localize') and (
+            self.env.context.get('import_file')
+            or modules.module.current_test
+            or not self.env.registry.ready
+            or self.env.context.get('install_demo')
+        ):
+            return False
+        partners_not_geo_localized = self.env['res.partner']
+        for partner in self.with_context(lang='en_US'):
+            result = self._geo_localize(partner.street,
+                                        partner.zip,
+                                        partner.city,
+                                        partner.state_id.name,
+                                        partner.country_id.name)
+
+            if result:
+                partner.write({
+                    'partner_latitude': result[0],
+                    'partner_longitude': result[1],
+                    'date_localization': fields.Date.context_today(partner)
+                })
+            else:
+                partners_not_geo_localized |= partner
+        if partners_not_geo_localized:
+            self.env.user._bus_send("simple_notification", {
+                'type': 'danger',
+                'title': _("Warning"),
+                'message': _('No match found for %(partner_names)s address(es).',
+                             partner_names=', '.join(partners_not_geo_localized.mapped('display_name')))
+            })
+        return True

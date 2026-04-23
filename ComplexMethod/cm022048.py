@@ -1,0 +1,221 @@
+async def test_issues_created(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    hass_ws_client: WebSocketGenerator,
+) -> None:
+    """Test issues are created and can be fixed."""
+    assert await async_setup_component(hass, REPAIRS_DOMAIN, {REPAIRS_DOMAIN: {}})
+    assert await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
+    await hass.async_block_till_done()
+    await hass.async_start()
+
+    ws_client = await hass_ws_client(hass)
+    client = await hass_client()
+
+    await ws_client.send_json({"id": 1, "type": "repairs/list_issues"})
+    msg = await ws_client.receive_json()
+
+    assert msg["success"]
+    assert msg["result"] == {
+        "issues": [
+            {
+                "breaks_in_ha_version": "2023.1.1",
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": False,
+                "issue_id": "transmogrifier_deprecated",
+                "issue_domain": None,
+                "learn_more_url": "https://en.wiktionary.org/wiki/transmogrifier",
+                "severity": "warning",
+                "translation_key": "transmogrifier_deprecated",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": "2023.1.1",
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": True,
+                "issue_id": "out_of_blinker_fluid",
+                "issue_domain": None,
+                "learn_more_url": "https://www.youtube.com/watch?v=b9rntRxLlbU",
+                "severity": "critical",
+                "translation_key": "out_of_blinker_fluid",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": False,
+                "issue_id": "unfixable_problem",
+                "issue_domain": None,
+                "learn_more_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "severity": "warning",
+                "translation_key": "unfixable_problem",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": True,
+                "issue_domain": None,
+                "issue_id": "bad_psu",
+                "learn_more_url": "https://www.youtube.com/watch?v=b9rntRxLlbU",
+                "severity": "critical",
+                "translation_key": "bad_psu",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "is_fixable": True,
+                "issue_domain": None,
+                "issue_id": "cold_tea",
+                "learn_more_url": None,
+                "severity": "warning",
+                "translation_key": "cold_tea",
+                "translation_placeholders": None,
+                "ignored": False,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": "homeassistant",
+                "is_fixable": False,
+                "issue_domain": DOMAIN,
+                "issue_id": ANY,
+                "learn_more_url": None,
+                "severity": "error",
+                "translation_key": "config_entry_reauth",
+                "translation_placeholders": {"name": "Kitchen Sink"},
+                "ignored": False,
+            },
+        ]
+    }
+
+    url = "/api/repairs/issues/fix"
+    resp = await client.post(
+        url, json={"handler": DOMAIN, "issue_id": "out_of_blinker_fluid"}
+    )
+
+    assert resp.status == HTTPStatus.OK
+    data = await resp.json()
+
+    flow_id = data["flow_id"]
+    assert data == {
+        "data_schema": [],
+        "description_placeholders": None,
+        "errors": None,
+        "flow_id": ANY,
+        "handler": DOMAIN,
+        "last_step": None,
+        "preview": None,
+        "step_id": "confirm",
+        "type": "form",
+    }
+
+    url = f"/api/repairs/issues/fix/{flow_id}"
+    resp = await client.post(url)
+
+    assert resp.status == HTTPStatus.OK
+    data = await resp.json()
+
+    flow_id = data["flow_id"]
+    assert data == {
+        "description": None,
+        "description_placeholders": None,
+        "flow_id": flow_id,
+        "handler": DOMAIN,
+        "type": "create_entry",
+    }
+
+    await ws_client.send_json({"id": 4, "type": "repairs/list_issues"})
+    msg = await ws_client.receive_json()
+
+    assert msg["success"]
+    assert msg["result"] == {
+        "issues": [
+            {
+                "breaks_in_ha_version": "2023.1.1",
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": False,
+                "issue_id": "transmogrifier_deprecated",
+                "issue_domain": None,
+                "learn_more_url": "https://en.wiktionary.org/wiki/transmogrifier",
+                "severity": "warning",
+                "translation_key": "transmogrifier_deprecated",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": False,
+                "issue_id": "unfixable_problem",
+                "issue_domain": None,
+                "learn_more_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "severity": "warning",
+                "translation_key": "unfixable_problem",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "ignored": False,
+                "is_fixable": True,
+                "issue_domain": None,
+                "issue_id": "bad_psu",
+                "learn_more_url": "https://www.youtube.com/watch?v=b9rntRxLlbU",
+                "severity": "critical",
+                "translation_key": "bad_psu",
+                "translation_placeholders": None,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": DOMAIN,
+                "is_fixable": True,
+                "issue_domain": None,
+                "issue_id": "cold_tea",
+                "learn_more_url": None,
+                "severity": "warning",
+                "translation_key": "cold_tea",
+                "translation_placeholders": None,
+                "ignored": False,
+            },
+            {
+                "breaks_in_ha_version": None,
+                "created": "2023-10-21T00:00:00+00:00",
+                "dismissed_version": None,
+                "domain": "homeassistant",
+                "is_fixable": False,
+                "issue_domain": DOMAIN,
+                "issue_id": ANY,
+                "learn_more_url": None,
+                "severity": "error",
+                "translation_key": "config_entry_reauth",
+                "translation_placeholders": {"name": "Kitchen Sink"},
+                "ignored": False,
+            },
+        ]
+    }

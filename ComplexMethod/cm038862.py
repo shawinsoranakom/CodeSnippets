@@ -1,0 +1,60 @@
+def main():
+    decoder = Decoder(type=KVEventBatch)
+    last_seq = -1
+
+    context = zmq.Context()
+
+    # Set up the main subscription socket
+    sub = context.socket(zmq.SUB)
+    sub.connect("tcp://localhost:5557")
+    topic = "kv-events"
+    sub.setsockopt_string(zmq.SUBSCRIBE, topic)
+
+    # Initialize replay socket
+    replay = context.socket(zmq.REQ)
+    replay.connect("tcp://localhost:5558")
+    poller = zmq.Poller()
+    poller.register(replay, zmq.POLLIN)
+
+    print("Listening for KV cache events on topic:", topic)
+
+    while True:
+        try:
+            if sub.poll(50):
+                _, seq_bytes, payload = sub.recv_multipart()
+                seq = int.from_bytes(seq_bytes, "big")
+
+                if last_seq >= 0 and seq > last_seq + 1:
+                    missed = seq - last_seq - 1
+                    print(
+                        f"Missed {missed} messages (last: {last_seq}, current: {seq})"
+                    )
+
+                    replay.send((last_seq + 1).to_bytes(8, "big"))
+
+                    while poller.poll(timeout=200):
+                        seq_bytes, replay_payload = replay.recv_multipart()
+                        if not replay_payload:
+                            # End of replay marker is sent as an empty frame
+                            # for the payload
+                            break
+
+                        replay_seq = int.from_bytes(seq_bytes, "big")
+
+                        if replay_seq > last_seq:
+                            event_batch = decoder.decode(replay_payload)
+                            process_event(event_batch)
+                            last_seq = replay_seq
+                            if replay_seq >= seq - 1:
+                                break
+
+                event_batch = decoder.decode(payload)
+                process_event(event_batch)
+
+            # ... do other periodic work or check for shutdown ...
+
+        except KeyboardInterrupt:
+            print("Interrupted")
+            break
+        except Exception as e:
+            print("Error decoding message:", e)

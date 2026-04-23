@@ -1,0 +1,72 @@
+async def async_migrate_entry(
+    hass: HomeAssistant, config_entry: SwitchBeeConfigEntry
+) -> bool:
+    """Migrate old entry."""
+    _LOGGER.debug("Migrating from version %s", config_entry.version)
+
+    if config_entry.version == 1:
+        dev_reg = dr.async_get(hass)
+        websession = async_get_clientsession(hass, verify_ssl=False)
+        old_unique_id = config_entry.unique_id
+        assert isinstance(old_unique_id, str)
+        api = await get_api_object(
+            config_entry.data[CONF_HOST],
+            config_entry.data[CONF_USERNAME],
+            config_entry.data[CONF_PASSWORD],
+            websession,
+        )
+        new_unique_id = api.unique_id
+
+        @callback
+        def update_unique_id(entity_entry: er.RegistryEntry) -> dict[str, str] | None:
+            """Update unique ID of entity entry."""
+            if match := re.match(
+                rf"(?:{old_unique_id})-(?P<id>\d+)", entity_entry.unique_id
+            ):
+                entity_new_unique_id = f"{new_unique_id}-{match.group('id')}"
+                _LOGGER.debug(
+                    "Migrating entity %s from %s to new id %s",
+                    entity_entry.entity_id,
+                    entity_entry.unique_id,
+                    entity_new_unique_id,
+                )
+                return {"new_unique_id": entity_new_unique_id}
+
+            return None
+
+        if new_unique_id:
+            # Migrate devices
+            for device_entry in dr.async_entries_for_config_entry(
+                dev_reg, config_entry.entry_id
+            ):
+                assert isinstance(device_entry, dr.DeviceEntry)
+                for identifier in device_entry.identifiers:
+                    if match := re.match(
+                        rf"(?P<id>.+)-{old_unique_id}$", identifier[1]
+                    ):
+                        new_identifiers = {
+                            (
+                                DOMAIN,
+                                f"{match.group('id')}-{new_unique_id}",
+                            )
+                        }
+                        _LOGGER.debug(
+                            "Migrating device %s identifiers from %s to %s",
+                            device_entry.name,
+                            device_entry.identifiers,
+                            new_identifiers,
+                        )
+                        dev_reg.async_update_device(
+                            device_entry.id, new_identifiers=new_identifiers
+                        )
+
+            # Migrate entities
+            await er.async_migrate_entries(
+                hass, config_entry.entry_id, update_unique_id
+            )
+
+            hass.config_entries.async_update_entry(config_entry, version=2)
+
+        _LOGGER.debug("Migration to version %s successful", config_entry.version)
+
+    return True

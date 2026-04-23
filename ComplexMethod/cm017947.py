@@ -1,0 +1,88 @@
+def get_shape_content(shape, **kwargs):
+                nonlocal md_content
+                # Pictures
+                if self._is_picture(shape):
+                    # https://github.com/scanny/python-pptx/pull/512#issuecomment-1713100069
+
+                    llm_description = ""
+                    alt_text = ""
+
+                    # Potentially generate a description using an LLM
+                    llm_client = kwargs.get("llm_client")
+                    llm_model = kwargs.get("llm_model")
+                    if llm_client is not None and llm_model is not None:
+                        # Prepare a file_stream and stream_info for the image data
+                        image_filename = shape.image.filename
+                        image_extension = None
+                        if image_filename:
+                            image_extension = os.path.splitext(image_filename)[1]
+                        image_stream_info = StreamInfo(
+                            mimetype=shape.image.content_type,
+                            extension=image_extension,
+                            filename=image_filename,
+                        )
+
+                        image_stream = io.BytesIO(shape.image.blob)
+
+                        # Caption the image
+                        try:
+                            llm_description = llm_caption(
+                                image_stream,
+                                image_stream_info,
+                                client=llm_client,
+                                model=llm_model,
+                                prompt=kwargs.get("llm_prompt"),
+                            )
+                        except Exception:
+                            # Unable to generate a description
+                            pass
+
+                    # Also grab any description embedded in the deck
+                    try:
+                        alt_text = shape._element._nvXxPr.cNvPr.attrib.get("descr", "")
+                    except Exception:
+                        # Unable to get alt text
+                        pass
+
+                    # Prepare the alt, escaping any special characters
+                    alt_text = "\n".join([llm_description, alt_text]) or shape.name
+                    alt_text = re.sub(r"[\r\n\[\]]", " ", alt_text)
+                    alt_text = re.sub(r"\s+", " ", alt_text).strip()
+
+                    # If keep_data_uris is True, use base64 encoding for images
+                    if kwargs.get("keep_data_uris", False):
+                        blob = shape.image.blob
+                        content_type = shape.image.content_type or "image/png"
+                        b64_string = base64.b64encode(blob).decode("utf-8")
+                        md_content += f"\n![{alt_text}](data:{content_type};base64,{b64_string})\n"
+                    else:
+                        # A placeholder name
+                        filename = re.sub(r"\W", "", shape.name) + ".jpg"
+                        md_content += "\n![" + alt_text + "](" + filename + ")\n"
+
+                # Tables
+                if self._is_table(shape):
+                    md_content += self._convert_table_to_markdown(shape.table, **kwargs)
+
+                # Charts
+                if shape.has_chart:
+                    md_content += self._convert_chart_to_markdown(shape.chart)
+
+                # Text areas
+                elif shape.has_text_frame:
+                    if shape == title:
+                        md_content += "# " + shape.text.lstrip() + "\n"
+                    else:
+                        md_content += shape.text + "\n"
+
+                # Group Shapes
+                if shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.GROUP:
+                    sorted_shapes = sorted(
+                        shape.shapes,
+                        key=lambda x: (
+                            float("-inf") if not x.top else x.top,
+                            float("-inf") if not x.left else x.left,
+                        ),
+                    )
+                    for subshape in sorted_shapes:
+                        get_shape_content(subshape, **kwargs)

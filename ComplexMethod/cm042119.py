@@ -1,0 +1,24 @@
+async def test_swe_agent(env):
+    requirement = "Fix bug in the calculator app"
+    swe = env.get_role("Swen")
+
+    message = Message(content=requirement, send_to={swe.name})
+    env.publish_message(message)
+
+    await swe.run()
+
+    history = env.history.get()
+    agent_messages = [msg for msg in history if msg.sent_from == swe.name]
+
+    assert swe.name == "Swen"
+    assert swe.profile == "Issue Solver"
+    assert isinstance(swe.terminal, Bash)
+
+    assert "Bash" in swe.tools
+    assert "git_create_pull" in swe.tool_execution_map
+
+    def is_valid_instruction_message(msg: Message) -> bool:
+        content = msg.content.lower()
+        return any(word in content for word in ["git", "bash", "check", "fix"])
+
+    assert any(is_valid_instruction_message(msg) for msg in agent_messages), "Should have valid instruction messages"

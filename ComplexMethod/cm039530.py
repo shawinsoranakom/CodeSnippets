@@ -1,0 +1,70 @@
+def test_det_curve_display(
+    pyplot,
+    constructor_name,
+    response_method,
+    with_sample_weight,
+    drop_intermediate,
+    with_strings,
+):
+    X, y = load_iris(return_X_y=True)
+    # Binarize the data with only the two first classes
+    X, y = X[y < 2], y[y < 2]
+
+    pos_label = None
+    if with_strings:
+        y = np.array(["c", "b"])[y]
+        pos_label = "c"
+
+    if with_sample_weight:
+        rng = np.random.RandomState(42)
+        sample_weight = rng.randint(1, 4, size=(X.shape[0]))
+    else:
+        sample_weight = None
+
+    lr = LogisticRegression()
+    lr.fit(X, y)
+    y_score = getattr(lr, response_method)(X)
+    if y_score.ndim == 2:
+        y_score = y_score[:, 1]
+    # safe guard for the binary if/else construction
+    assert constructor_name in ("from_estimator", "from_predictions")
+
+    common_kwargs = {
+        "name": lr.__class__.__name__,
+        "alpha": 0.8,
+        "sample_weight": sample_weight,
+        "drop_intermediate": drop_intermediate,
+        "pos_label": pos_label,
+    }
+    if constructor_name == "from_estimator":
+        disp = DetCurveDisplay.from_estimator(lr, X, y, **common_kwargs)
+    else:
+        disp = DetCurveDisplay.from_predictions(y, y_score, **common_kwargs)
+
+    fpr, fnr, _ = det_curve(
+        y,
+        y_score,
+        sample_weight=sample_weight,
+        drop_intermediate=drop_intermediate,
+        pos_label=pos_label,
+    )
+
+    assert_allclose(disp.fpr, fpr, atol=1e-7)
+    assert_allclose(disp.fnr, fnr, atol=1e-7)
+
+    assert disp.estimator_name == "LogisticRegression"
+
+    # cannot fail thanks to pyplot fixture
+    import matplotlib as mpl
+
+    assert isinstance(disp.line_, mpl.lines.Line2D)
+    assert disp.line_.get_alpha() == 0.8
+    assert isinstance(disp.ax_, mpl.axes.Axes)
+    assert isinstance(disp.figure_, mpl.figure.Figure)
+    assert disp.line_.get_label() == "LogisticRegression"
+
+    expected_pos_label = 1 if pos_label is None else pos_label
+    expected_ylabel = f"False Negative Rate (Positive label: {expected_pos_label})"
+    expected_xlabel = f"False Positive Rate (Positive label: {expected_pos_label})"
+    assert disp.ax_.get_ylabel() == expected_ylabel
+    assert disp.ax_.get_xlabel() == expected_xlabel

@@ -1,0 +1,117 @@
+async def test_lookup_media_for_other_integrations(
+    hass: HomeAssistant,
+    entry,
+    setup_plex_server,
+    requests_mock: requests_mock.Mocker,
+    playqueue_1234,
+    playqueue_created,
+) -> None:
+    """Test media lookup for media_player.play_media calls from cast/sonos."""
+    CONTENT_ID = PLEX_URI_SCHEME + '{"library_name": "Music", "artist_name": "Artist"}'
+    CONTENT_ID_KEY = PLEX_URI_SCHEME + "100"
+    CONTENT_ID_BAD_MEDIA = (
+        PLEX_URI_SCHEME + '{"library_name": "Music", "artist_name": "Not an Artist"}'
+    )
+    CONTENT_ID_PLAYQUEUE = PLEX_URI_SCHEME + '{"playqueue_id": 1234}'
+    CONTENT_ID_BAD_PLAYQUEUE = PLEX_URI_SCHEME + '{"playqueue_id": 1235}'
+    CONTENT_ID_SERVER = (
+        PLEX_URI_SCHEME
+        + '{"plex_server": "Plex Server 1", "library_name": "Music", "artist_name": "Artist"}'
+    )
+    CONTENT_ID_SHUFFLE = (
+        PLEX_URI_SCHEME
+        + '{"library_name": "Music", "artist_name": "Artist", "shuffle": 1}'
+    )
+    CONTENT_ID_CONTINUOUS = (
+        PLEX_URI_SCHEME
+        + '{"library_name": "Music", "artist_name": "Artist", "continuous": 1}'
+    )
+
+    # Test with no Plex integration available
+    with pytest.raises(HomeAssistantError) as excinfo:
+        process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID)
+    assert "Plex integration not configured" in str(excinfo.value)
+
+    with patch(
+        "homeassistant.components.plex.PlexServer.connect", side_effect=NotFound
+    ):
+        # Initialize Plex integration without setting up a server
+        with pytest.raises(AssertionError):
+            await setup_plex_server()
+
+        # Test with no Plex servers available
+        with pytest.raises(HomeAssistantError) as excinfo:
+            process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID)
+        assert "No Plex servers available" in str(excinfo.value)
+
+    # Complete setup of a Plex server
+    await hass.config_entries.async_unload(entry.entry_id)
+    await setup_plex_server()
+
+    # Test lookup success without playqueue
+    result = process_plex_payload(
+        hass, MediaType.MUSIC, CONTENT_ID, supports_playqueues=False
+    )
+    assert isinstance(result.media, plexapi.audio.Artist)
+    assert not result.shuffle
+    assert not result.continuous
+
+    # Test media key payload without playqueue
+    result = process_plex_payload(
+        hass, MediaType.MUSIC, CONTENT_ID_KEY, supports_playqueues=False
+    )
+    assert isinstance(result.media, plexapi.audio.Track)
+    assert not result.shuffle
+
+    # Test with specified server without playqueue
+    result = process_plex_payload(
+        hass, MediaType.MUSIC, CONTENT_ID_SERVER, supports_playqueues=False
+    )
+    assert isinstance(result.media, plexapi.audio.Artist)
+    assert not result.shuffle
+
+    # Test shuffle without playqueue
+    result = process_plex_payload(
+        hass, MediaType.MUSIC, CONTENT_ID_SHUFFLE, supports_playqueues=False
+    )
+    assert isinstance(result.media, plexapi.audio.Artist)
+    assert result.shuffle
+
+    # Test continuous without playqueue
+    result = process_plex_payload(
+        hass, MediaType.MUSIC, CONTENT_ID_CONTINUOUS, supports_playqueues=False
+    )
+    assert isinstance(result.media, plexapi.audio.Artist)
+    assert result.continuous
+
+    # Test with media not found
+    with patch(
+        "plexapi.library.LibrarySection.search",
+        return_value=None,
+        __qualname__="search",
+    ):
+        with pytest.raises(HomeAssistantError) as excinfo:
+            process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID_BAD_MEDIA)
+        assert f"No {MediaType.MUSIC} results in 'Music' for" in str(excinfo.value)
+
+    # Test with playqueue
+    requests_mock.get("https://1.2.3.4:32400/playQueues/1234", text=playqueue_1234)
+    result = process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID_PLAYQUEUE)
+    assert isinstance(result.media, plexapi.playqueue.PlayQueue)
+
+    # Test with invalid playqueue
+    requests_mock.get(
+        "https://1.2.3.4:32400/playQueues/1235", status_code=HTTPStatus.NOT_FOUND
+    )
+    with pytest.raises(HomeAssistantError) as excinfo:
+        process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID_BAD_PLAYQUEUE)
+    assert "PlayQueue '1235' could not be found" in str(excinfo.value)
+
+    # Test playqueue is created with shuffle
+    requests_mock.post("/playqueues", text=playqueue_created)
+    result = process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID_SHUFFLE)
+    assert isinstance(result.media, plexapi.playqueue.PlayQueue)
+
+    # Test playqueue is created with continuous
+    result = process_plex_payload(hass, MediaType.MUSIC, CONTENT_ID_CONTINUOUS)
+    assert isinstance(result.media, plexapi.playqueue.PlayQueue)

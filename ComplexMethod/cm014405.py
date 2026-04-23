@@ -1,0 +1,83 @@
+def _try_isolate_lhs(
+    e: sympy.Basic, thing: sympy.Basic, floordiv_inequality: bool
+) -> sympy.Basic:
+    op = type(e)
+
+    if isinstance(e, sympy.Rel):
+        # Move any constants in the left-hand side to the right-hand side.
+        lhs_not_thing = (
+            sum(a for a in e.lhs.args if not a.has(thing))
+            if isinstance(e.lhs, sympy.Add)
+            else 0
+        )
+        e = op(e.lhs - lhs_not_thing, e.rhs - lhs_not_thing)  # type: ignore[attr-defined]
+
+    # Divide both sides by the factors that don't contain thing.
+    if isinstance(e, sympy.Rel) and isinstance(e.lhs, sympy.Mul):
+        lhs, rhs = e.args
+        other = sympy.Mul(*[a for a in lhs.args if not a.has(thing)])
+
+        # If we can't tell whether 'other' is negative or positive, we do nothing.
+        # That is because we don't know whether we have mirror the operation or not.
+        # We also divide only when we know 'rhs' is not zero.
+        if not (isinstance(e, INEQUALITY_TYPES) and other.is_negative is None) and not (
+            not isinstance(e, INEQUALITY_TYPES) and rhs.is_zero
+        ):
+            # Divide both sides by 'other'.
+            lhs = lhs / other
+            rhs = rhs / other
+
+            # If 'e' is an inequality and 'other' is negative, we have to
+            # mirror the expression.
+            if isinstance(e, INEQUALITY_TYPES) and other.is_negative:
+                op = mirror_rel_op(op)  # type: ignore[assignment]
+
+            if op is None:
+                raise AssertionError("expected op to be not None")
+            e = op(lhs, rhs)
+
+    ################################################################################
+    # left-hand side is FloorDiv
+    ################################################################################
+    #
+    # Given the expression: a // b op c
+    # where 'op' is a relational operation, these rules only work if:
+    #   - b > 0
+    #   - c is an integer
+    if (
+        floordiv_inequality
+        and isinstance(e, sympy.Rel)
+        and isinstance(e.lhs, FloorDiv)
+        and e.lhs.divisor.is_positive
+        and e.rhs.is_integer
+    ):
+        # a // b == expr
+        # => a >= (b * expr) and a < (b * (expr + 1))
+        if isinstance(e, sympy.Eq):
+            numerator, denominator = e.lhs.args
+            return sympy.And(
+                sympy.Ge(numerator, (e.rhs * denominator)),
+                sympy.Lt(numerator, ((e.rhs + 1) * denominator)),
+            )
+        # a // b != expr
+        # => a < (b * expr) or a >= (b * (expr + 1))
+        if isinstance(e, sympy.Ne):
+            numerator, denominator = e.lhs.args
+            return sympy.Or(
+                sympy.Lt(numerator, (e.rhs * denominator)),
+                sympy.Ge(numerator, ((e.rhs + 1) * denominator)),
+            )
+        # The transformations below only work if b is positive.
+        # Note: we only have this information for constants.
+        # a // b > expr  => a >= b * (expr + 1)
+        # a // b >= expr => a >= b * expr
+        if isinstance(e, (sympy.Gt, sympy.Ge)):
+            quotient = e.rhs if isinstance(e, sympy.Ge) else (e.rhs + 1)
+            return sympy.Ge(e.lhs.args[0], (quotient * e.lhs.args[1]))
+        # a // b < expr  => a < b * expr
+        # a // b <= expr => a < b * (expr + 1)
+        if isinstance(e, (sympy.Lt, sympy.Le)):
+            quotient = e.rhs if isinstance(e, sympy.Lt) else (e.rhs + 1)
+            return sympy.Lt(e.lhs.args[0], (quotient * e.lhs.args[1]))
+
+    return e

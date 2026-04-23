@@ -1,0 +1,27 @@
+def run_uv_export(
+    *,
+    extras: list[str] | None = None,
+    groups: list[str] | None = None,
+    prune_packages: list[str] | None = None,
+    omit_packages: list[str] | None = None,
+    bare: bool = False,
+    output_file: pathlib.Path | None = None,
+) -> str:
+    return run_process(
+        'uv', 'export',
+        '--no-python-downloads',
+        '--quiet',
+        '--no-progress',
+        '--color=never',
+        '--format=requirements.txt',
+        '--frozen',
+        '--refresh',
+        '--no-emit-project',
+        '--no-default-groups',
+        *(f'--extra={extra}' for extra in (extras or [])),
+        *(f'--group={group}' for group in (groups or [])),
+        *(f'--prune={package}' for package in (prune_packages or [])),
+        *(f'--no-emit-package={package}' for package in (omit_packages or [])),
+        *(['--no-annotate', '--no-hashes', '--no-header'] if bare else []),
+        *([f'--output-file={output_file.relative_to(BASE_PATH)}'] if output_file else []),
+    ).stdout

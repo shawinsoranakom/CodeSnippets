@@ -1,0 +1,140 @@
+async def test_zcl_schema_conversions(hass: HomeAssistant) -> None:
+    """Test ZHA ZCL schema conversion helpers."""
+    command_schema = lighting.Color.ServerCommandDefs.color_loop_set.schema
+    expected_schema = [
+        {
+            "type": "multi_select",
+            "options": ["Action", "Direction", "Time", "Start Hue"],
+            "name": "update_flags",
+            "required": True,
+        },
+        {
+            "type": "select",
+            "options": [
+                ("Deactivate", "Deactivate"),
+                ("Activate from color loop hue", "Activate from color loop hue"),
+                ("Activate from current hue", "Activate from current hue"),
+            ],
+            "name": "action",
+            "required": True,
+        },
+        {
+            "type": "select",
+            "options": [("Decrement", "Decrement"), ("Increment", "Increment")],
+            "name": "direction",
+            "required": True,
+        },
+        {
+            "type": "integer",
+            "valueMin": 0,
+            "valueMax": 65535,
+            "name": "time",
+            "required": True,
+        },
+        {
+            "type": "integer",
+            "valueMin": 0,
+            "valueMax": 65535,
+            "name": "start_hue",
+            "required": True,
+        },
+        {
+            "type": "multi_select",
+            "options": ["Execute if off present"],
+            "name": "options_mask",
+            "optional": True,
+            "required": False,
+        },
+        {
+            "type": "multi_select",
+            "options": ["Execute if off"],
+            "name": "options_override",
+            "optional": True,
+            "required": False,
+        },
+    ]
+    vol_schema = voluptuous_serialize.convert(
+        cluster_command_schema_to_vol_schema(command_schema),
+        custom_serializer=cv.custom_serializer,
+    )
+    assert vol_schema == expected_schema
+
+    raw_data = {
+        "update_flags": ["Action", "Start Hue"],
+        "action": "Activate from current hue",
+        "direction": "Increment",
+        "time": 20,
+        "start_hue": 196,
+    }
+
+    converted_data = convert_to_zcl_values(raw_data, command_schema)
+
+    assert isinstance(
+        converted_data["update_flags"], lighting.Color.ColorLoopUpdateFlags
+    )
+    assert lighting.Color.ColorLoopUpdateFlags.Action in converted_data["update_flags"]
+    assert (
+        lighting.Color.ColorLoopUpdateFlags.Start_Hue in converted_data["update_flags"]
+    )
+
+    assert isinstance(converted_data["action"], lighting.Color.ColorLoopAction)
+    assert (
+        converted_data["action"]
+        == lighting.Color.ColorLoopAction.Activate_from_current_hue
+    )
+
+    assert isinstance(converted_data["direction"], lighting.Color.ColorLoopDirection)
+    assert converted_data["direction"] == lighting.Color.ColorLoopDirection.Increment
+
+    assert isinstance(converted_data["time"], uint16_t)
+    assert converted_data["time"] == 20
+
+    assert isinstance(converted_data["start_hue"], uint16_t)
+    assert converted_data["start_hue"] == 196
+
+    raw_data = {
+        "update_flags": [0b0000_0001, 0b0000_1000],
+        "action": 0x02,
+        "direction": 0x01,
+        "time": 20,
+        "start_hue": 196,
+    }
+
+    converted_data = convert_to_zcl_values(raw_data, command_schema)
+
+    assert isinstance(
+        converted_data["update_flags"], lighting.Color.ColorLoopUpdateFlags
+    )
+    assert lighting.Color.ColorLoopUpdateFlags.Action in converted_data["update_flags"]
+    assert (
+        lighting.Color.ColorLoopUpdateFlags.Start_Hue in converted_data["update_flags"]
+    )
+
+    assert isinstance(converted_data["action"], lighting.Color.ColorLoopAction)
+    assert (
+        converted_data["action"]
+        == lighting.Color.ColorLoopAction.Activate_from_current_hue
+    )
+
+    assert isinstance(converted_data["direction"], lighting.Color.ColorLoopDirection)
+    assert converted_data["direction"] == lighting.Color.ColorLoopDirection.Increment
+
+    assert isinstance(converted_data["time"], uint16_t)
+    assert converted_data["time"] == 20
+
+    assert isinstance(converted_data["start_hue"], uint16_t)
+    assert converted_data["start_hue"] == 196
+
+    # This time, the update flags bitmap is empty
+    raw_data = {
+        "update_flags": [],
+        "action": 0x02,
+        "direction": 0x01,
+        "time": 20,
+        "start_hue": 196,
+    }
+
+    converted_data = convert_to_zcl_values(raw_data, command_schema)
+
+    # No flags are passed through
+    assert converted_data["update_flags"] == 0

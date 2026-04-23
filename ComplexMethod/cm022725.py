@@ -1,0 +1,38 @@
+async def test_co(hass: HomeAssistant, hk_driver) -> None:
+    """Test if accessory is updated after state change."""
+    entity_id = "sensor.co"
+
+    hass.states.async_set(entity_id, None)
+    await hass.async_block_till_done()
+    acc = CarbonMonoxideSensor(hass, hk_driver, "CO", entity_id, 2, None)
+    acc.run()
+    await hass.async_block_till_done()
+
+    assert acc.aid == 2
+    assert acc.category == 10  # Sensor
+
+    assert acc.char_level.value == 0
+    assert acc.char_peak.value == 0
+    assert acc.char_detected.value == 0
+
+    hass.states.async_set(entity_id, STATE_UNKNOWN)
+    await hass.async_block_till_done()
+    assert acc.char_level.value == 0
+    assert acc.char_peak.value == 0
+    assert acc.char_detected.value == 0
+
+    value = 32
+    assert value > THRESHOLD_CO
+    hass.states.async_set(entity_id, str(value))
+    await hass.async_block_till_done()
+    assert acc.char_level.value == 32
+    assert acc.char_peak.value == 32
+    assert acc.char_detected.value == 1
+
+    value = 10
+    assert value < THRESHOLD_CO
+    hass.states.async_set(entity_id, str(value))
+    await hass.async_block_till_done()
+    assert acc.char_level.value == 10
+    assert acc.char_peak.value == 32
+    assert acc.char_detected.value == 0

@@ -1,0 +1,138 @@
+def _generate_panoptic_masks(
+      self, boxes: tf.Tensor, scores: tf.Tensor, classes: tf.Tensor,
+      detections_masks: tf.Tensor,
+      segmentation_mask: tf.Tensor) -> Dict[str, tf.Tensor]:
+    """Generates panoptic masks for a single image.
+
+    This function implements the following steps to merge instance and semantic
+      segmentation masks described in https://arxiv.org/pdf/1901.02446.pdf
+    Steps:
+      1. resolving overlaps between different instances based on their
+          confidence scores
+      2. resolving overlaps between instance and semantic segmentation
+          outputs in favor of instances
+      3. removing any stuff regions labeled other or under a given area
+          threshold.
+    Args:
+      boxes: A `tf.Tensor` of shape [num_rois, 4], representing the bounding
+        boxes for detected objects.
+      scores: A `tf.Tensor` of shape [num_rois], representing the
+        confidence scores for each object.
+      classes: A `tf.Tensor` of shape [num_rois], representing the class
+        for each object.
+      detections_masks: A `tf.Tensor` of shape
+        [num_rois, mask_height, mask_width, 1], representing the cropped mask
+        for each object.
+      segmentation_mask: A `tf.Tensor` of shape [height, width], representing
+        the semantic segmentation output.
+    Returns:
+      Dict with the following keys:
+        - category_mask: A `tf.Tensor` for category masks.
+        - instance_mask: A `tf.Tensor for instance masks.
+    """
+
+    # Offset stuff class predictions
+    segmentation_mask = tf.where(
+        tf.logical_or(
+            tf.equal(segmentation_mask, self._things_class_label),
+            tf.equal(segmentation_mask, self._void_class_label)),
+        segmentation_mask,
+        segmentation_mask + self._stuff_classes_offset
+    )
+    # sort instances by their scores
+    sorted_indices = tf.argsort(scores, direction='DESCENDING')
+
+    mask_shape = self._output_size + [1]
+    category_mask = tf.ones(mask_shape,
+                            dtype=tf.float32) * self._void_class_label
+    instance_mask = tf.ones(
+        mask_shape, dtype=tf.float32) * self._void_instance_id
+
+    # filter instances with low confidence
+    sorted_scores = tf.sort(scores, direction='DESCENDING')
+
+    valid_indices = tf.where(sorted_scores > self._score_threshold)
+
+    # if no instance has sufficient confidence score, skip merging
+    # instance segmentation masks
+    if tf.shape(valid_indices)[0] > 0:
+      loop_end_idx = valid_indices[-1, 0] + 1
+      loop_end_idx = tf.minimum(
+          tf.cast(loop_end_idx, dtype=tf.int32),
+          self._max_num_detections)
+      pasted_masks = self._paste_masks_fn((
+          detections_masks[:loop_end_idx],
+          boxes[:loop_end_idx]))
+
+      # add things segmentation to panoptic masks
+      for i in range(loop_end_idx):
+        # we process instances in decending order, which will make sure
+        # the overlaps are resolved based on confidence score
+        instance_idx = sorted_indices[i]
+
+        pasted_mask = pasted_masks[instance_idx]
+
+        class_id = tf.cast(classes[instance_idx], dtype=tf.float32)
+
+        # convert sigmoid scores to binary values
+        binary_mask = tf.greater(
+            pasted_mask, self._mask_binarize_threshold)
+
+        # filter empty instance masks
+        if not tf.reduce_sum(tf.cast(binary_mask, tf.float32)) > 0:
+          continue
+
+        overlap = tf.logical_and(
+            binary_mask,
+            tf.not_equal(category_mask, self._void_class_label))
+        binary_mask_area = tf.reduce_sum(
+            tf.cast(binary_mask, dtype=tf.float32))
+        overlap_area = tf.reduce_sum(
+            tf.cast(overlap, dtype=tf.float32))
+
+        # skip instance that have a big enough overlap with instances with
+        # higer scores
+        if overlap_area / binary_mask_area > self._things_overlap_threshold:
+          continue
+
+        # fill empty regions in category_mask represented by
+        # void_class_label with class_id of the instance.
+        category_mask = tf.where(
+            tf.logical_and(
+                binary_mask, tf.equal(category_mask, self._void_class_label)),
+            tf.ones_like(category_mask) * class_id, category_mask)
+
+        # fill empty regions in the instance_mask represented by
+        # void_instance_id with the id of the instance, starting from 1
+        instance_mask = tf.where(
+            tf.logical_and(
+                binary_mask,
+                tf.equal(instance_mask, self._void_instance_id)),
+            tf.ones_like(instance_mask) *
+            tf.cast(instance_idx + 1, tf.float32), instance_mask)
+
+    stuff_class_ids = tf.unique(tf.reshape(segmentation_mask, [-1])).y
+    for stuff_class_id in stuff_class_ids:
+      if stuff_class_id == self._things_class_label:
+        continue
+
+      stuff_mask = tf.logical_and(
+          tf.equal(segmentation_mask, stuff_class_id),
+          tf.equal(category_mask, self._void_class_label))
+
+      stuff_mask_area = tf.reduce_sum(
+          tf.cast(stuff_mask, dtype=tf.float32))
+
+      if stuff_mask_area < self._stuff_area_threshold:
+        continue
+
+      category_mask = tf.where(
+          stuff_mask,
+          tf.ones_like(category_mask) * stuff_class_id,
+          category_mask)
+
+    results = {
+        'category_mask': category_mask[:, :, 0],
+        'instance_mask': instance_mask[:, :, 0]
+    }
+    return results

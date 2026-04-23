@@ -1,0 +1,64 @@
+async def test_user_flow_router_not_setup(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Test the user flow when the border router has no dataset.
+
+    This tests the behavior when the thread integration has no preferred dataset.
+    """
+    url = "http://custom_url:1234"
+    aioclient_mock.get(f"{url}/node/dataset/active", status=HTTPStatus.NO_CONTENT)
+    aioclient_mock.put(f"{url}/node/dataset/active", status=HTTPStatus.CREATED)
+    aioclient_mock.put(f"{url}/node/state", status=HTTPStatus.OK)
+
+    result = await hass.config_entries.flow.async_init(
+        otbr.DOMAIN, context={"source": "user"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {}
+
+    with (
+        patch(
+            "homeassistant.components.otbr.config_flow.async_get_preferred_dataset",
+            return_value=None,
+        ),
+        patch(
+            "homeassistant.components.otbr.async_setup_entry",
+            return_value=True,
+        ) as mock_setup_entry,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                "url": url,
+            },
+        )
+
+    # Check we create a dataset and enable the router
+    assert aioclient_mock.mock_calls[-2][0] == "PUT"
+    assert aioclient_mock.mock_calls[-2][1].path == "/node/dataset/active"
+    pan_id = aioclient_mock.mock_calls[-2][2]["PanId"]
+    assert aioclient_mock.mock_calls[-2][2] == {
+        "Channel": 15,
+        "NetworkName": f"ha-thread-{pan_id:04x}",
+        "PanId": pan_id,
+    }
+
+    assert aioclient_mock.mock_calls[-1][0] == "PUT"
+    assert aioclient_mock.mock_calls[-1][1].path == "/node/state"
+    assert aioclient_mock.mock_calls[-1][2] == "enable"
+
+    expected_data = {
+        "url": "http://custom_url:1234",
+    }
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Open Thread Border Router"
+    assert result["data"] == expected_data
+    assert result["options"] == {}
+    assert len(mock_setup_entry.mock_calls) == 1
+
+    config_entry = hass.config_entries.async_entries(otbr.DOMAIN)[0]
+    assert config_entry.data == expected_data
+    assert config_entry.options == {}
+    assert config_entry.title == "Open Thread Border Router"
+    assert config_entry.unique_id == TEST_BORDER_AGENT_ID.hex()

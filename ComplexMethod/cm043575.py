@@ -1,0 +1,75 @@
+def main(argv: list | None = None) -> int:
+    """Run the OpenBB cookiecutter template.
+
+    Args:
+        argv: Command line arguments (defaults to sys.argv[1:])
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate an OpenBB Platform extension from template"
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        default=".",
+        help="Where to output the generated project (default: current directory)",
+    )
+    parser.add_argument(
+        "--no-input",
+        action="store_true",
+        help="Do not prompt for parameters and use defaults",
+    )
+    parser.add_argument(
+        "-f", "--overwrite-if-exists", action="store_true", help="Overwrite if exists"
+    )
+    parser.add_argument(
+        "--extra-context",
+        action="append",
+        metavar="KEY=VALUE",
+        help="Extra context variables (can be used multiple times)",
+    )
+    parser.add_argument(
+        "-e",
+        "--extension-types",
+        nargs="+",
+        choices=VALID_EXTENSION_TYPES,
+        default=None,
+        help="Extension types to include (default: all). "
+        "Choices: router, provider, obbject, on_command_output, charting, all",
+    )
+
+    args = parser.parse_args(argv)
+
+    extra_context = {}
+    if args.extra_context:
+        for item in args.extra_context:
+            if "=" not in item:
+                print(f"Error: extra-context must be in KEY=VALUE format: {item}")
+                return 1
+            key, value = item.split("=", 1)
+            extra_context[key] = value
+
+    if args.no_input:
+        if args.extension_types:
+            extra_context["extension_types"] = ",".join(args.extension_types)
+    else:
+        preset_types = args.extension_types if args.extension_types else None
+        context = _prompt_context(preset_extension_types=preset_types)
+        extra_context.update(context)
+
+    template_path = get_template_path()
+
+    try:
+        cookiecutter(
+            str(template_path),
+            output_dir=args.output_dir,
+            no_input=True,
+            overwrite_if_exists=args.overwrite_if_exists,
+            extra_context=extra_context if extra_context else None,
+        )
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)  # noqa
+        return 1

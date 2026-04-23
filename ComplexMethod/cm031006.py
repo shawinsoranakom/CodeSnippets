@@ -1,0 +1,67 @@
+def setup_process() -> None:
+    assert sys.__stderr__ is not None, "sys.__stderr__ is None"
+    try:
+        stderr_fd = sys.__stderr__.fileno()
+    except (ValueError, AttributeError):
+        # Catch ValueError to catch io.UnsupportedOperation on TextIOBase
+        # and ValueError on a closed stream.
+        #
+        # Catch AttributeError for stderr being None.
+        pass
+    else:
+        # Display the Python traceback on fatal errors (e.g. segfault)
+        faulthandler.enable(all_threads=True, file=stderr_fd)
+
+        # Display the Python traceback on SIGALRM or SIGUSR1 signal
+        signals: list[signal.Signals] = []
+        if hasattr(signal, 'SIGALRM'):
+            signals.append(signal.SIGALRM)
+        if hasattr(signal, 'SIGUSR1'):
+            signals.append(signal.SIGUSR1)
+        for signum in signals:
+            faulthandler.register(signum, chain=True, file=stderr_fd)
+
+    adjust_rlimit_nofile()
+
+    support.record_original_stdout(sys.stdout)
+
+    # Set sys.stdout encoder error handler to backslashreplace,
+    # similar to sys.stderr error handler, to avoid UnicodeEncodeError
+    # when printing a traceback or any other non-encodable character.
+    #
+    # Use an assertion to fix mypy error.
+    assert isinstance(sys.stdout, io.TextIOWrapper)
+    sys.stdout.reconfigure(errors="backslashreplace")
+
+    # Some times __path__ and __file__ are not absolute (e.g. while running from
+    # Lib/) and, if we change the CWD to run the tests in a temporary dir, some
+    # imports might fail.  This affects only the modules imported before os.chdir().
+    # These modules are searched first in sys.path[0] (so '' -- the CWD) and if
+    # they are found in the CWD their __file__ and __path__ will be relative (this
+    # happens before the chdir).  All the modules imported after the chdir, are
+    # not found in the CWD, and since the other paths in sys.path[1:] are absolute
+    # (site.py absolutize them), the __file__ and __path__ will be absolute too.
+    # Therefore it is necessary to absolutize manually the __file__ and __path__ of
+    # the packages to prevent later imports to fail when the CWD is different.
+    for module in sys.modules.values():
+        if hasattr(module, '__path__'):
+            for index, path in enumerate(module.__path__):
+                module.__path__[index] = os.path.abspath(path)
+        if getattr(module, '__file__', None):
+            module.__file__ = os.path.abspath(module.__file__)  # type: ignore[type-var]
+
+    if hasattr(sys, 'addaudithook'):
+        # Add an auditing hook for all tests to ensure PySys_Audit is tested
+        def _test_audit_hook(name, args):
+            pass
+        sys.addaudithook(_test_audit_hook)
+
+    setup_unraisable_hook()
+    setup_threading_excepthook()
+
+    # Ensure there's a non-ASCII character in env vars at all times to force
+    # tests consider this case. See BPO-44647 for details.
+    if TESTFN_UNDECODABLE and os.supports_bytes_environ:
+        os.environb.setdefault(UNICODE_GUARD_ENV.encode(), TESTFN_UNDECODABLE)
+    elif FS_NONASCII:
+        os.environ.setdefault(UNICODE_GUARD_ENV, FS_NONASCII)

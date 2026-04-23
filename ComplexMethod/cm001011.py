@@ -1,0 +1,39 @@
+async def test_run_agent(setup_test_data):
+    """Test that the run_agent tool successfully executes an approved agent"""
+    # Use test data from fixture
+    user = setup_test_data["user"]
+    graph = setup_test_data["graph"]
+    store_submission = setup_test_data["store_submission"]
+
+    # Create the tool instance
+    tool = RunAgentTool()
+
+    # Build the proper marketplace agent_id format: username/slug
+    agent_marketplace_id = f"{user.email.split('@')[0]}/{store_submission.slug}"
+
+    # Build the session
+    session = make_session(user_id=user.id)
+
+    # Execute the tool
+    response = await tool.execute(
+        user_id=user.id,
+        session_id=str(uuid.uuid4()),
+        tool_call_id=str(uuid.uuid4()),
+        username_agent_slug=agent_marketplace_id,
+        inputs={"test_input": "Hello World"},
+        dry_run=False,
+        session=session,
+    )
+
+    # Verify the response
+    assert response is not None
+    assert hasattr(response, "output")
+    # Parse the result JSON to verify the execution started
+
+    assert isinstance(response.output, str)
+    result_data = orjson.loads(response.output)
+    assert "execution_id" in result_data
+    assert "graph_id" in result_data
+    assert result_data["graph_id"] == graph.id
+    assert "graph_name" in result_data
+    assert result_data["graph_name"] == "Test Agent"

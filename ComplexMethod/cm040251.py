@@ -1,0 +1,145 @@
+def export(
+        self,
+        filepath,
+        format="tf_saved_model",
+        verbose=None,
+        input_signature=None,
+        **kwargs,
+    ):
+        """Export the model as an artifact for inference.
+
+        Args:
+            filepath: `str` or `pathlib.Path` object. The path to save the
+                artifact.
+            format: `str`. The export format. Supported values:
+                `"tf_saved_model"`, `"onnx"`, `"openvino"`, and `"litert"`.
+                Defaults to `"tf_saved_model"`.
+            verbose: `bool`. Whether to print a message during export. Defaults
+                to `None`, which uses the default value set by different
+                backends and formats.
+            input_signature: Optional. Specifies the shape and dtype of the
+                model inputs. Can be a structure of `keras.InputSpec`,
+                `tf.TensorSpec`, `backend.KerasTensor`, or backend tensor. If
+                not provided, it will be automatically computed. Defaults to
+                `None`.
+            **kwargs: Additional keyword arguments.
+                - `is_static`: Optional `bool`. Specific to the JAX backend and
+                    `format="tf_saved_model"`. Indicates whether `fn` is static.
+                    Set to `False` if `fn` involves state updates (e.g., RNG
+                    seeds and counters).
+                - `jax2tf_kwargs`: Optional `dict`. Specific to the JAX backend
+                    and `format="tf_saved_model"`. Arguments for
+                    `jax2tf.convert`. See the documentation for
+                    [`jax2tf.convert`](
+                        https://github.com/google/jax/blob/main/jax/experimental/jax2tf/README.md).
+                    If `native_serialization` and `polymorphic_shapes` are not
+                    provided, they will be automatically computed.
+                - `opset_version`: Optional `int`. Specific to `format="onnx"`.
+                    An integer value that specifies the ONNX opset version.
+                - LiteRT-specific options: Optional keyword arguments specific
+                    to `format="litert"`. These are passed directly to the
+                    TensorFlow Lite converter and include options like
+                    `optimizations`, `representative_dataset`,
+                    `experimental_new_quantizer`, `allow_custom_ops`,
+                    `enable_select_tf_ops`, etc. See TensorFlow Lite
+                    documentation for all available options.
+
+        **Note:** This feature is currently supported only with TensorFlow, JAX
+        and Torch backends.
+
+        **Note:** Be aware that the exported artifact may contain information
+        from the local file system when using `format="onnx"`, `verbose=True`
+        and Torch backend.
+
+        Examples:
+
+        Here's how to export a TensorFlow SavedModel for inference.
+
+        ```python
+        # Export the model as a TensorFlow SavedModel artifact
+        model.export("path/to/location", format="tf_saved_model")
+
+        # Load the artifact in a different process/environment
+        reloaded_artifact = tf.saved_model.load("path/to/location")
+        predictions = reloaded_artifact.serve(input_data)
+        ```
+
+        Here's how to export an ONNX for inference.
+
+        ```python
+        # Export the model as a ONNX artifact
+        model.export("path/to/location", format="onnx")
+
+        # Load the artifact in a different process/environment
+        ort_session = onnxruntime.InferenceSession("path/to/location")
+        ort_inputs = {
+            k.name: v for k, v in zip(ort_session.get_inputs(), input_data)
+        }
+        predictions = ort_session.run(None, ort_inputs)
+        ```
+
+        Here's how to export a LiteRT (TFLite) for inference.
+
+        ```python
+        # Export the model as a LiteRT artifact
+        model.export("path/to/location", format="litert")
+
+        # Load the artifact in a different process/environment
+        interpreter = tf.lite.Interpreter(model_path="path/to/location")
+        interpreter.allocate_tensors()
+        interpreter.set_tensor(
+            interpreter.get_input_details()[0]['index'], input_data
+        )
+        interpreter.invoke()
+        output_data = interpreter.get_tensor(
+            interpreter.get_output_details()[0]['index']
+        )
+        ```
+        """
+        from keras.src.export import export_litert
+        from keras.src.export import export_onnx
+        from keras.src.export import export_openvino
+        from keras.src.export import export_saved_model
+
+        available_formats = ("tf_saved_model", "onnx", "openvino", "litert")
+        if format not in available_formats:
+            raise ValueError(
+                f"Unrecognized format={format}. Supported formats are: "
+                f"{list(available_formats)}."
+            )
+
+        # Check if LiteRT export is available (requires TensorFlow backend)
+        if format == "litert" and backend.backend() != "tensorflow":
+            raise ImportError("LiteRT export requires TensorFlow backend.")
+
+        if format == "tf_saved_model":
+            export_saved_model(
+                self,
+                filepath,
+                verbose,
+                input_signature=input_signature,
+                **kwargs,
+            )
+        elif format == "onnx":
+            export_onnx(
+                self,
+                filepath,
+                verbose,
+                input_signature=input_signature,
+                **kwargs,
+            )
+        elif format == "openvino":
+            export_openvino(
+                self,
+                filepath,
+                verbose,
+                input_signature=input_signature,
+                **kwargs,
+            )
+        elif format == "litert":
+            export_litert(
+                self,
+                filepath,
+                input_signature=input_signature,
+                **kwargs,
+            )

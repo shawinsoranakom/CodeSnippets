@@ -1,0 +1,27 @@
+def preprocess_request(self, ctx: AppContext) -> ft.ResponseReturnValue | None:
+        """Called before the request is dispatched. Calls
+        :attr:`url_value_preprocessors` registered with the app and the
+        current blueprint (if any). Then calls :attr:`before_request_funcs`
+        registered with the app and the blueprint.
+
+        If any :meth:`before_request` handler returns a non-None value, the
+        value is handled as if it was the return value from the view, and
+        further request handling is stopped.
+        """
+        req = ctx.request
+        names = (None, *reversed(req.blueprints))
+
+        for name in names:
+            if name in self.url_value_preprocessors:
+                for url_func in self.url_value_preprocessors[name]:
+                    url_func(req.endpoint, req.view_args)
+
+        for name in names:
+            if name in self.before_request_funcs:
+                for before_func in self.before_request_funcs[name]:
+                    rv = self.ensure_sync(before_func)()
+
+                    if rv is not None:
+                        return rv  # type: ignore[no-any-return]
+
+        return None

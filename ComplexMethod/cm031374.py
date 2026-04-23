@@ -1,0 +1,34 @@
+def interactive_console(mainmodule=None, quiet=False, pythonstartup=False):
+    if not CAN_USE_PYREPL:
+        if not os.getenv('PYTHON_BASIC_REPL') and FAIL_REASON:
+            from .trace import trace
+            trace(FAIL_REASON)
+            print(FAIL_REASON, file=sys.stderr)
+        return sys._baserepl()
+
+    if not mainmodule:
+        mainmodule = types.ModuleType("__main__")
+
+    namespace = mainmodule.__dict__
+
+    # sys._baserepl() above does this internally, we do it here
+    startup_path = os.getenv("PYTHONSTARTUP")
+    if pythonstartup and startup_path:
+        sys.audit("cpython.run_startup", startup_path)
+
+        import tokenize
+        with tokenize.open(startup_path) as f:
+            startup_code = compile(f.read(), startup_path, "exec")
+            exec(startup_code, namespace)
+
+    # set sys.{ps1,ps2} just before invoking the interactive interpreter. This
+    # mimics what CPython does in pythonrun.c
+    if not hasattr(sys, "ps1"):
+        sys.ps1 = ">>> "
+    if not hasattr(sys, "ps2"):
+        sys.ps2 = "... "
+
+    from .console import InteractiveColoredConsole
+    from .simple_interact import run_multiline_interactive_console
+    console = InteractiveColoredConsole(namespace, filename="<stdin>")
+    run_multiline_interactive_console(console)

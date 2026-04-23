@@ -1,0 +1,90 @@
+def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[InternVLProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        if text is None:
+            raise ValueError("You have to specify text.")
+
+        output_kwargs = self._merge_kwargs(
+            InternVLProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if not isinstance(text, (list, tuple)):
+            text = [text]
+
+        # Process images and videos separately, as videos don't support crop_to_patches
+        image_num_patches = []
+        image_pixel_values = None
+        image_num_patches_indices = np.array([0])
+        if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_num_patches = image_inputs.pop("num_patches")
+            image_pixel_values = image_inputs.pop("pixel_values")
+            image_num_patches_indices = np.cumsum(image_num_patches)
+
+        video_num_patches = []  # per frame
+        video_pixel_values = None
+        video_patch_indices = np.array([0])
+        video_num_patches_indices = np.array([0])
+        if videos is not None:
+            video_kwargs = output_kwargs["videos_kwargs"]
+            video_inputs = self.video_processor(videos=videos, **video_kwargs)
+            video_pixel_values = video_inputs.pop("pixel_values_videos")
+
+            batch_size, num_frames, *_ = video_pixel_values.shape
+            num_frames_per_video = np.full(batch_size, num_frames)
+            num_frames = sum(num_frames_per_video)  # total
+            video_patch_indices = np.empty(batch_size + 1, int)
+            video_patch_indices[0] = 0
+            video_patch_indices[1:] = np.cumsum(num_frames_per_video)
+            video_num_patches = [1] * num_frames
+            video_num_patches_indices = np.empty(num_frames + 1, int)
+            video_num_patches_indices[0] = 0
+            video_num_patches_indices[1:] = np.cumsum(video_num_patches)
+            video_pixel_values = video_pixel_values.flatten(0, 1)
+
+        image_videos_inputs = {}
+        if images is not None or videos is not None:
+            text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
+                text,
+                image_pixel_values,
+                video_pixel_values,
+                image_num_patches,
+                video_num_patches,
+                image_num_patches_indices,
+                video_num_patches_indices,
+                video_patch_indices,
+            )
+            if images is not None and image_index != len(images):
+                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
+            if videos is not None and video_index != len(num_frames_per_video):
+                raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
+
+            # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
+            image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+        return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)

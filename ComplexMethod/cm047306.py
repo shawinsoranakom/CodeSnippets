@@ -1,0 +1,38 @@
+def _reflect_field_params(self, field, model_id):
+        """ Return the values to write to the database for the given field. """
+        translate = next(k for k, v in FIELD_TRANSLATE.items() if v == field.translate)
+        return {
+            'model_id': model_id,
+            'model': field.model_name,
+            'name': field.name,
+            'field_description': field.string,
+            'help': field.help or None,
+            'ttype': field.type,
+            'state': 'manual' if field.manual else 'base',
+            'relation': field.comodel_name or None,
+            'index': bool(field.index),
+            'store': bool(field.store),
+            'copied': bool(field.copy),
+            'on_delete': field.ondelete if field.type == 'many2one' else None,
+            'related': field.related or None,
+            'readonly': bool(field.readonly),
+            'required': bool(field.required),
+            'selectable': bool(field.search or field.store),
+            'size': getattr(field, 'size', None),
+            'translate': translate,
+            'company_dependent': bool(field.company_dependent),
+            'relation_field': field.inverse_name if field.type == 'one2many' else None,
+            'relation_table': field.relation if field.type == 'many2many' else None,
+            'column1': field.column1 if field.type == 'many2many' else None,
+            'column2': field.column2 if field.type == 'many2many' else None,
+            'currency_field': field.currency_field if field.type == 'monetary' else None,
+            # html sanitization attributes (useless for other fields)
+            'sanitize': field.sanitize if field.type == 'html' else None,
+            'sanitize_overridable': field.sanitize_overridable if field.type == 'html' else None,
+            'sanitize_tags': field.sanitize_tags if field.type == 'html' else None,
+            'sanitize_attributes': field.sanitize_attributes if field.type == 'html' else None,
+            'sanitize_style': field.sanitize_style if field.type == 'html' else None,
+            'sanitize_form': field.sanitize_form if field.type == 'html' else None,
+            'strip_style': field.strip_style if field.type == 'html' else None,
+            'strip_classes': field.strip_classes if field.type == 'html' else None,
+        }

@@ -1,0 +1,143 @@
+def check_file(filename: str) -> list[LintMessage]:
+    """
+    Parse the stable/c/shim.h file and check that:
+    1. All function declarations are within TORCH_FEATURE_VERSION blocks
+    2. New functions added in this commit use the current version macro
+
+    For the AOTI shim (torch/csrc/inductor/aoti_torch/c/shim.h), we only
+    enforce versioning on NEW function declarations, since existing functions
+    are intentionally not version-guarded.
+    """
+    lint_messages: list[LintMessage] = []
+
+    # Check if this is the AOTI shim - only enforce versioning on new lines
+    is_aoti_shim = "torch/csrc/inductor/aoti_torch/c/shim.h" in filename
+
+    # Get current version
+    current_version = get_current_version()
+    major, minor = current_version
+    expected_version_macro = f"TORCH_VERSION_{major}_{minor}_0"
+    expected_version_check = f"#if TORCH_FEATURE_VERSION >= {expected_version_macro}"
+
+    # Get lines that are uncommitted or added in the most recent commit
+    added_lines = get_added_lines(filename)
+
+    with open(filename) as f:
+        lines = f.readlines()
+
+    # Use PreprocessorTracker to handle preprocessor directives
+    tracker = PreprocessorTracker()
+
+    # Track extern "C" blocks separately
+    inside_extern_c = False
+
+    # Patterns for extern "C" blocks
+    extern_c_pattern = re.compile(r'extern\s+"C"\s*{')
+    extern_c_end_pattern = re.compile(r'}\s*//\s*extern\s+"C"')
+
+    # Function declaration patterns - looking for AOTI_TORCH_EXPORT or typedef
+    function_decl_patterns = [
+        re.compile(r"^\s*AOTI_TORCH_EXPORT\s+\w+"),  # AOTI_TORCH_EXPORT functions
+        re.compile(r"^\s*typedef\s+.*\(\*\w+\)"),  # typedef function pointers
+        re.compile(r"^\s*using\s+\w+\s*="),  # using declarations
+    ]
+
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # Skip empty lines
+        if not stripped:
+            continue
+
+        # Let the tracker process preprocessor directives and comments
+        is_directive_or_comment = tracker.process_line(line)
+
+        if is_directive_or_comment:
+            continue
+
+        # Track extern "C" blocks
+        if extern_c_pattern.search(stripped):
+            inside_extern_c = True
+            continue
+        if extern_c_end_pattern.search(stripped):
+            inside_extern_c = False
+            continue
+
+        # Check for function declarations
+        if inside_extern_c:
+            is_function_decl = any(
+                pattern.match(stripped) for pattern in function_decl_patterns
+            )
+
+            if is_function_decl:
+                # Check if this is a newly added line
+                is_new_line = line_num in added_lines
+
+                # Get current version state from tracker
+                inside_version_block = tracker.is_in_version_block()
+                tracker_version = tracker.get_version_of_block()
+                version_of_block_macro = (
+                    f"TORCH_VERSION_{tracker_version[0]}_{tracker_version[1]}_0"
+                    if tracker_version
+                    else None
+                )
+
+                if not inside_version_block:
+                    # Function declaration outside of version block
+                    if not is_new_line:
+                        # Existing function declaration outside of version block in aoti shim is ignored
+                        if is_aoti_shim:
+                            continue
+                        expected_version_macro_str = "TORCH_VERSION_X_Y_Z"
+                        expected_version_check_str = (
+                            f"#if TORCH_FEATURE_VERSION >= {expected_version_macro}"
+                        )
+                        additional_text = "\nX, Y, and Z correspond to the TORCH_ABI_VERSION when the function was added."
+                    else:
+                        expected_version_macro_str = expected_version_macro
+                        expected_version_check_str = expected_version_check
+                        additional_text = ""
+                    lint_messages.append(
+                        LintMessage(
+                            path=filename,
+                            line=line_num,
+                            char=None,
+                            code=LINTER_CODE,
+                            severity=LintSeverity.ERROR,
+                            name="unversioned-function-declaration",
+                            original=None,
+                            replacement=None,
+                            description=(
+                                f"Function declaration found outside of TORCH_FEATURE_VERSION block. "
+                                f"All function declarations must be wrapped in:\n"
+                                f"{expected_version_check_str}\n"
+                                f"// ... your declarations ...\n"
+                                f"#endif // TORCH_FEATURE_VERSION >= {expected_version_macro_str}"
+                                f"{additional_text}"
+                            ),
+                        )
+                    )
+                elif is_new_line and version_of_block_macro != expected_version_macro:
+                    # New function declaration using wrong version macro
+                    lint_messages.append(
+                        LintMessage(
+                            path=filename,
+                            line=line_num,
+                            char=None,
+                            code=LINTER_CODE,
+                            severity=LintSeverity.ERROR,
+                            name="wrong-version-for-new-function",
+                            original=None,
+                            replacement=None,
+                            description=(
+                                f"New function declaration should use {expected_version_macro}, "
+                                f"but is wrapped in {version_of_block_macro}. "
+                                f"New additions in this commit must use the current version:\n"
+                                f"{expected_version_check}\n"
+                                f"// ... your declarations ...\n"
+                                f"#endif // TORCH_FEATURE_VERSION >= {expected_version_macro}"
+                            ),
+                        )
+                    )
+
+    return lint_messages

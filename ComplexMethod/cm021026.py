@@ -1,0 +1,95 @@
+async def test_valve_entity(
+    hass: HomeAssistant,
+    mock_client: APIClient,
+    mock_esphome_device: MockESPHomeDeviceType,
+) -> None:
+    """Test a generic valve entity."""
+    entity_info = [
+        ValveInfo(
+            object_id="myvalve",
+            key=1,
+            name="my valve",
+            supports_position=True,
+            supports_stop=True,
+        )
+    ]
+    states = [
+        ESPHomeValveState(
+            key=1,
+            position=0.5,
+            current_operation=ValveOperation.IS_OPENING,
+        )
+    ]
+    user_service = []
+    mock_device = await mock_esphome_device(
+        mock_client=mock_client,
+        entity_info=entity_info,
+        user_service=user_service,
+        states=states,
+    )
+    state = hass.states.get("valve.test_my_valve")
+    assert state is not None
+    assert state.state == ValveState.OPENING
+    assert state.attributes[ATTR_CURRENT_POSITION] == 50
+
+    await hass.services.async_call(
+        VALVE_DOMAIN,
+        SERVICE_CLOSE_VALVE,
+        {ATTR_ENTITY_ID: "valve.test_my_valve"},
+        blocking=True,
+    )
+    mock_client.valve_command.assert_has_calls([call(key=1, position=0.0, device_id=0)])
+    mock_client.valve_command.reset_mock()
+
+    await hass.services.async_call(
+        VALVE_DOMAIN,
+        SERVICE_OPEN_VALVE,
+        {ATTR_ENTITY_ID: "valve.test_my_valve"},
+        blocking=True,
+    )
+    mock_client.valve_command.assert_has_calls([call(key=1, position=1.0, device_id=0)])
+    mock_client.valve_command.reset_mock()
+
+    await hass.services.async_call(
+        VALVE_DOMAIN,
+        SERVICE_SET_VALVE_POSITION,
+        {ATTR_ENTITY_ID: "valve.test_my_valve", ATTR_POSITION: 50},
+        blocking=True,
+    )
+    mock_client.valve_command.assert_has_calls([call(key=1, position=0.5, device_id=0)])
+    mock_client.valve_command.reset_mock()
+
+    await hass.services.async_call(
+        VALVE_DOMAIN,
+        SERVICE_STOP_VALVE,
+        {ATTR_ENTITY_ID: "valve.test_my_valve"},
+        blocking=True,
+    )
+    mock_client.valve_command.assert_has_calls([call(key=1, stop=True, device_id=0)])
+    mock_client.valve_command.reset_mock()
+
+    mock_device.set_state(
+        ESPHomeValveState(key=1, position=0.0, current_operation=ValveOperation.IDLE)
+    )
+    await hass.async_block_till_done()
+    state = hass.states.get("valve.test_my_valve")
+    assert state is not None
+    assert state.state == ValveState.CLOSED
+
+    mock_device.set_state(
+        ESPHomeValveState(
+            key=1, position=0.5, current_operation=ValveOperation.IS_CLOSING
+        )
+    )
+    await hass.async_block_till_done()
+    state = hass.states.get("valve.test_my_valve")
+    assert state is not None
+    assert state.state == ValveState.CLOSING
+
+    mock_device.set_state(
+        ESPHomeValveState(key=1, position=1.0, current_operation=ValveOperation.IDLE)
+    )
+    await hass.async_block_till_done()
+    state = hass.states.get("valve.test_my_valve")
+    assert state is not None
+    assert state.state == ValveState.OPEN

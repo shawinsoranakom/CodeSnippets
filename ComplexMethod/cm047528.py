@@ -1,0 +1,43 @@
+def _add_manual_models(env: Environment):
+    """ Add extra models to the registry. """
+    # clean up registry first
+    removed_fields = OrderedSet()
+    for name, model_cls in list(env.registry.items()):
+        if model_cls._custom:
+            removed_fields.update(model_cls._fields.values())
+            del env.registry.models[name]
+            # remove the model's name from its parents' _inherit_children
+            for parent_cls in model_cls.__bases__:
+                if hasattr(parent_cls, 'pool'):
+                    parent_cls._inherit_children.discard(name)
+
+    if removed_fields:
+        env.registry._discard_fields(list(removed_fields))
+
+    # we cannot use self._fields to determine translated fields, as it has not been set up yet
+    env.cr.execute("SELECT *, name->>'en_US' AS name FROM ir_model WHERE state = 'manual'")
+    for model_data in env.cr.dictfetchall():
+        attrs = env['ir.model']._instanciate_attrs(model_data)
+
+        # adapt _auto and _log_access if necessary
+        table_name = model_data["model"].replace(".", "_")
+        table_kind = sql.table_kind(env.cr, table_name)
+        if table_kind not in (sql.TableKind.Regular, None):
+            _logger.info(
+                "Model %r is backed by table %r which is not a regular table (%r), disabling automatic schema management",
+                model_data["model"], table_name, table_kind,
+            )
+            attrs['_auto'] = False
+            env.cr.execute(
+                """ SELECT a.attname
+                    FROM pg_attribute a
+                    JOIN pg_class t ON a.attrelid = t.oid AND t.relname = %s
+                    WHERE a.attnum > 0 -- skip system columns
+                    AND t.relnamespace = current_schema::regnamespace """,
+                [table_name]
+            )
+            columns = {colinfo[0] for colinfo in env.cr.fetchall()}
+            attrs['_log_access'] = set(models.LOG_ACCESS_COLUMNS) <= columns
+
+        model_def = type('CustomDefinitionModel', (models.Model,), attrs)
+        add_to_registry(env.registry, model_def)

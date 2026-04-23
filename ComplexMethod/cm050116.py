@@ -1,0 +1,36 @@
+def set_employee_location(self):
+        self.ensure_one()
+        if not self.date:
+            return
+        default_employee_id = self.env.context.get('default_employee_id') or self.env.user.employee_id.id
+        employee_id = self.env['hr.employee'].browse(self.employee_id.id or default_employee_id)
+        employee_location = self.env['hr.employee.location'].search([
+            ('date', '=', self.date),
+            ('employee_id', '=', employee_id.id)
+        ])
+        weekday = self.date.weekday()
+        default_location_for_current_date = DAYS[weekday]
+        if self.weekly:
+            # delete any exceptions on the current date
+            if employee_location:
+                employee_location.unlink()
+            employee_id.sudo().user_id.write({
+                default_location_for_current_date: self.work_location_id.id,
+            })
+        else:
+            # check if work_location_id is the same as the default one for that day
+            if self.work_location_id.id == employee_id[default_location_for_current_date].id:
+                employee_location.unlink()
+            # check if worklocation is set for that employee that day
+            elif employee_location:
+                employee_location.write({
+                    'date': self.date,
+                    'employee_id': employee_id.id,
+                    'work_location_id': self.work_location_id.id
+                })
+            else:
+                self.env['hr.employee.location'].create({
+                    'date': self.date,
+                    'employee_id': employee_id.id,
+                    'work_location_id': self.work_location_id.id
+                })

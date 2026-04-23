@@ -1,0 +1,45 @@
+def from_nested_dict(cls, data: dict) -> "NestedCompleter":
+        """Create a `NestedCompleter`.
+
+        It starts from a nested dictionary data structure, like this:
+
+        .. code::
+
+            data = {
+                'show': {
+                    'version': None,
+                    'interfaces': None,
+                    'clock': None,
+                    'ip': {'interface': {'brief'}}
+                },
+                'exit': None
+                'enable': None
+            }
+
+        The value should be `None` if there is no further completion at some
+        point. If all values in the dictionary are None, it is also possible to
+        use a set instead.
+
+        Values in this data structure can be a completers as well.
+        """
+        options: dict[str, Any] = {}
+        for key, value in data.items():
+            if isinstance(value, Completer):
+                options[key] = value
+            elif isinstance(value, dict):
+                options[key] = cls.from_nested_dict(value)
+            elif isinstance(value, set):
+                options[key] = cls.from_nested_dict({item: None for item in value})
+            elif isinstance(key, str) and isinstance(value, str):
+                options[key] = options[value]
+            else:
+                assert value is None  # noqa: S101
+                options[key] = None
+
+        for items in cls.complementary:
+            if items[0] in options:
+                options[items[1]] = options[items[0]]
+            elif items[1] in options:
+                options[items[0]] = options[items[1]]
+
+        return cls(options)

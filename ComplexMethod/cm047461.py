@@ -1,0 +1,44 @@
+def load_openerp_module(module_name: str) -> None:
+    """ Load an OpenERP module, if not already loaded.
+
+    This loads the module and register all of its models, thanks to either
+    the MetaModel metaclass, or the explicit instantiation of the model.
+    This is also used to load server-wide module (i.e. it is also used
+    when there is no model to register).
+    """
+
+    qualname = f'odoo.addons.{module_name}'
+    if qualname in sys.modules:
+        return
+
+    try:
+        __import__(qualname)
+
+        # Call the module's post-load hook. This can done before any model or
+        # data has been initialized. This is ok as the post-load hook is for
+        # server-wide (instead of registry-specific) functionalities.
+        manifest = Manifest.for_addon(module_name)
+        if post_load := manifest.get('post_load'):
+            getattr(sys.modules[qualname], post_load)()
+
+    except AttributeError as err:
+        _logger.critical("Couldn't load module %s", module_name)
+        trace = traceback.format_exc()
+        match = TYPED_FIELD_DEFINITION_RE.search(trace)
+        if match and "most likely due to a circular import" in trace:
+            field_name = match['field_name']
+            field_class = match['field_class']
+            field_type = match['field_type'] or match['type_param']
+            if "." not in field_type:
+                field_type = f"{module_name}.{field_type}"
+            raise AttributeError(
+                f"{err}\n"
+                "To avoid circular import for the the comodel use the annotation syntax:\n"
+                f"    {field_name}: {field_type} = fields.{field_class}(...)\n"
+                "and add at the beggining of the file:\n"
+                "    from __future__ import annotations"
+            ).with_traceback(err.__traceback__) from None
+        raise
+    except Exception:
+        _logger.critical("Couldn't load module %s", module_name)
+        raise

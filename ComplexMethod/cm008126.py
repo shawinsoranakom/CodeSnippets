@@ -1,0 +1,132 @@
+def _real_extract(self, url):
+        video_id, display_id = self._match_valid_url(url).group('id', 'display_id')
+        self._set_cookie('.youporn.com', 'age_verified', '1')
+        webpage = self._download_webpage(f'https://www.youporn.com/watch/{video_id}', video_id)
+
+        watchable = self._search_regex(
+            r'''(<div\s[^>]*\bid\s*=\s*('|")?watch-container(?(2)\2|(?!-)\b)[^>]*>)''',
+            webpage, 'watchability', default=None)
+        if not watchable:
+            msg = re.split(r'\s{2}', clean_html(get_element_by_id('mainContent', webpage)) or '')[0]
+            raise ExtractorError(
+                f'{self.IE_NAME} says: {msg}' if msg else 'Video unavailable', expected=True)
+
+        player_vars = self._search_json(r'\bplayervars\s*:', webpage, 'player vars', video_id)
+        definitions = player_vars['mediaDefinitions']
+
+        def get_format_data(data, stream_type):
+            info_url = traverse_obj(data, (lambda _, v: v['format'] == stream_type, 'videoUrl', {url_or_none}, any))
+            if not info_url:
+                return []
+            return traverse_obj(
+                self._download_json(info_url, video_id, f'Downloading {stream_type} info JSON', fatal=False),
+                lambda _, v: v['format'] == stream_type and url_or_none(v['videoUrl']))
+
+        formats = []
+        # Try to extract only the actual master m3u8 first, avoiding the duplicate single resolution "master" m3u8s
+        for hls_url in traverse_obj(get_format_data(definitions, 'hls'), (
+                lambda _, v: not isinstance(v['defaultQuality'], bool), 'videoUrl'), (..., 'videoUrl')):
+            formats.extend(self._extract_m3u8_formats(hls_url, video_id, 'mp4', fatal=False, m3u8_id='hls'))
+
+        for definition in get_format_data(definitions, 'mp4'):
+            f = traverse_obj(definition, {
+                'url': 'videoUrl',
+                'filesize': ('videoSize', {int_or_none}),
+            })
+            height = int_or_none(definition.get('quality'))
+            # Video URL's path looks like this:
+            #  /201012/17/505835/720p_1500k_505835/YouPorn%20-%20Sex%20Ed%20Is%20It%20Safe%20To%20Masturbate%20Daily.mp4
+            #  /201012/17/505835/vl_240p_240k_505835/YouPorn%20-%20Sex%20Ed%20Is%20It%20Safe%20To%20Masturbate%20Daily.mp4
+            #  /videos/201703/11/109285532/1080P_4000K_109285532.mp4
+            # We will benefit from it by extracting some metadata
+            mobj = re.search(r'(?P<height>\d{3,4})[pP]_(?P<bitrate>\d+)[kK]_\d+', definition['videoUrl'])
+            if mobj:
+                if not height:
+                    height = int(mobj.group('height'))
+                bitrate = int(mobj.group('bitrate'))
+                f.update({
+                    'format_id': f'{height}p-{bitrate}k',
+                    'tbr': bitrate,
+                })
+            f['height'] = height
+            formats.append(f)
+
+        title = self._html_search_regex(
+            r'(?s)<div[^>]+class=["\']watchVideoTitle[^>]+>(.+?)</div>',
+            webpage, 'title', default=None) or self._og_search_title(
+            webpage, default=None) or self._html_search_meta(
+            'title', webpage, fatal=True)
+
+        description = self._html_search_regex(
+            r'(?s)<div[^>]+\bid=["\']description["\'][^>]*>(.+?)</div>',
+            webpage, 'description',
+            default=None) or self._og_search_description(
+            webpage, default=None)
+        thumbnail = self._search_regex(
+            r'(?:imageurl\s*=|poster\s*:)\s*(["\'])(?P<thumbnail>.+?)\1',
+            webpage, 'thumbnail', fatal=False, group='thumbnail')
+        duration = traverse_obj(player_vars, ('duration', {int_or_none}))
+        if duration is None:
+            duration = int_or_none(self._html_search_meta(
+                'video:duration', webpage, 'duration', fatal=False))
+
+        uploader = self._html_search_regex(
+            r'(?s)<div[^>]+class=["\']submitByLink["\'][^>]*>(.+?)</div>',
+            webpage, 'uploader', fatal=False)
+        upload_date = unified_strdate(self._html_search_regex(
+            (r'UPLOADED:\s*<span>([^<]+)',
+             r'Date\s+[Aa]dded:\s*<span>([^<]+)',
+             r'''(?s)<div[^>]+class=["']videoInfo(?:Date|Time)\b[^>]*>(.+?)</div>''',
+             r'(?s)<label\b[^>]*>Uploaded[^<]*</label>\s*<span\b[^>]*>(.+?)</span>'),
+            webpage, 'upload date', fatal=False))
+
+        age_limit = self._rta_search(webpage)
+
+        view_count = None
+        views = self._search_regex(
+            r'(<div [^>]*\bdata-value\s*=[^>]+>)\s*<label>Views:</label>',
+            webpage, 'views', default=None)
+        if views:
+            view_count = parse_count(extract_attributes(views).get('data-value'))
+        comment_count = parse_count(self._search_regex(
+            r'>All [Cc]omments? \(([\d,.]+)\)',
+            webpage, 'comment count', default=None))
+
+        def extract_tag_box(regex, title):
+            tag_box = self._search_regex(regex, webpage, title, default=None)
+            if not tag_box:
+                return []
+            return re.findall(r'<a[^>]+href=[^>]+>([^<]+)', tag_box)
+
+        categories = extract_tag_box(
+            r'(?s)Categories:.*?</[^>]+>(.+?)</div>', 'categories')
+        tags = extract_tag_box(
+            r'(?s)Tags:.*?</div>\s*<div[^>]+class=["\']tagBoxContent["\'][^>]*>(.+?)</div>',
+            'tags')
+
+        data = self._search_json_ld(webpage, video_id, expected_type='VideoObject', fatal=False)
+        data.pop('url', None)
+
+        result = merge_dicts(data, {
+            'id': video_id,
+            'display_id': display_id,
+            'title': title,
+            'description': description,
+            'thumbnail': thumbnail,
+            'duration': duration,
+            'uploader': uploader,
+            'upload_date': upload_date,
+            'view_count': view_count,
+            'comment_count': comment_count,
+            'categories': categories,
+            'tags': tags,
+            'age_limit': age_limit,
+            'formats': formats,
+        })
+
+        # Remove SEO spam "description"
+        description = result.get('description')
+        if description and description.startswith(f'Watch {result.get("title")} online'):
+            del result['description']
+
+        return result

@@ -1,0 +1,61 @@
+async def test_hassio_discovery_flow_router_not_setup_has_preferred_2(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    multiprotocol_addon_manager_mock,
+    otbr_addon_info,
+) -> None:
+    """Test the hassio discovery flow when the border router has no dataset.
+
+    This tests the behavior when the thread integration has a preferred dataset, but
+    the preferred dataset is not using channel 15.
+    """
+    url = "http://core-silabs-multiprotocol:8081"
+    aioclient_mock.get(f"{url}/node/dataset/active", status=HTTPStatus.NO_CONTENT)
+    aioclient_mock.put(f"{url}/node/dataset/active", status=HTTPStatus.CREATED)
+    aioclient_mock.put(f"{url}/node/state", status=HTTPStatus.OK)
+
+    multiprotocol_addon_manager_mock.async_get_channel.return_value = 15
+
+    with (
+        patch(
+            "homeassistant.components.otbr.config_flow.async_get_preferred_dataset",
+            return_value=DATASET_CH16.hex(),
+        ),
+        patch(
+            "homeassistant.components.otbr.async_setup_entry",
+            return_value=True,
+        ) as mock_setup_entry,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            otbr.DOMAIN, context={"source": "hassio"}, data=HASSIO_DATA
+        )
+
+    # Check we create a dataset and enable the router
+    assert aioclient_mock.mock_calls[-2][0] == "PUT"
+    assert aioclient_mock.mock_calls[-2][1].path == "/node/dataset/active"
+    pan_id = aioclient_mock.mock_calls[-2][2]["PanId"]
+    assert aioclient_mock.mock_calls[-2][2] == {
+        "Channel": 15,
+        "NetworkName": f"ha-thread-{pan_id:04x}",
+        "PanId": pan_id,
+    }
+
+    assert aioclient_mock.mock_calls[-1][0] == "PUT"
+    assert aioclient_mock.mock_calls[-1][1].path == "/node/state"
+    assert aioclient_mock.mock_calls[-1][2] == "enable"
+
+    expected_data = {
+        "url": f"http://{HASSIO_DATA.config['host']}:{HASSIO_DATA.config['port']}",
+    }
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Silicon Labs Multiprotocol"
+    assert result["data"] == expected_data
+    assert result["options"] == {}
+    assert len(mock_setup_entry.mock_calls) == 1
+
+    config_entry = hass.config_entries.async_entries(otbr.DOMAIN)[0]
+    assert config_entry.data == expected_data
+    assert config_entry.options == {}
+    assert config_entry.title == "Silicon Labs Multiprotocol"
+    assert config_entry.unique_id == HASSIO_DATA.uuid

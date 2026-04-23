@@ -1,0 +1,86 @@
+def block_expansion(
+    model_name_or_path: str,
+    output_dir: str,
+    num_expand: int,
+    shard_size: str = "5GB",
+    save_safetensors: bool = True,
+):
+    r"""Perform block expansion for LLaMA, Mistral, Qwen2 or Yi models.
+
+    Usage: python llama_pro.py --model_name_or_path meta-llama/Llama-2-7b-hf --output_dir llama2_pro --num_expand 8
+    """
+    config: PretrainedConfig = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
+    num_layers = getattr(config, "num_hidden_layers")
+    if num_layers % num_expand != 0:
+        raise ValueError(f"`num_layers` {num_layers} should be divisible by `num_expand` {num_expand}.")
+
+    setattr(config, "num_hidden_layers", num_layers + num_expand)
+    config.save_pretrained(output_dir)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
+    tokenizer.save_pretrained(output_dir)
+
+    print(f"Expanding model of {num_layers} layers to {num_layers + num_expand} layers.")
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path, torch_dtype="auto", device_map="cpu", trust_remote_code=True, low_cpu_mem_usage=True
+    )
+    assert isinstance(model, PreTrainedModel)  # type hint
+    if save_safetensors and getattr(model.config, "tie_word_embeddings", False):
+        del model.lm_head  # safetensors does not allow shared weights
+
+    split = num_layers // num_expand
+    layer_cnt = 0
+    state_dict = model.state_dict()
+    output_state_dict: dict[str, torch.Tensor] = OrderedDict()
+    for i in range(num_layers):
+        for key, value in state_dict.items():
+            if f".{i:d}." in key:
+                output_state_dict[change_name(key, i, layer_cnt)] = value
+
+        print(f"Add layer {layer_cnt} copied from layer {i}.")
+        layer_cnt += 1
+        if (i + 1) % split == 0:
+            for key, value in state_dict.items():
+                if f".{i:d}." in key:
+                    if "down_proj" in key or "o_proj" in key:
+                        output_state_dict[change_name(key, i, layer_cnt)] = torch.zeros_like(value)
+                    else:
+                        output_state_dict[change_name(key, i, layer_cnt)] = torch.clone(value)
+
+            print(f"Add layer {layer_cnt} expanded from layer {i}.")
+            layer_cnt += 1
+
+    for key, value in state_dict.items():
+        if key not in output_state_dict:
+            output_state_dict[key] = value
+
+    weights_name = SAFE_WEIGHTS_NAME if save_safetensors else WEIGHTS_NAME
+    filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
+    state_dict_split = split_torch_state_dict_into_shards(
+        output_state_dict, filename_pattern=filename_pattern, max_shard_size=shard_size
+    )
+    for shard_file, tensors in tqdm(state_dict_split.filename_to_tensors.items(), desc="Save weights"):
+        shard = {tensor: output_state_dict[tensor].contiguous() for tensor in tensors}
+        if save_safetensors:
+            save_file(shard, os.path.join(output_dir, shard_file), metadata={"format": "pt"})
+        else:
+            torch.save(shard, os.path.join(output_dir, shard_file))
+
+    if not state_dict_split.is_sharded:
+        print(f"Model weights saved in {os.path.join(output_dir, weights_name)}.")
+    else:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
+        index_name = SAFE_WEIGHTS_INDEX_NAME if save_safetensors else WEIGHTS_INDEX_NAME
+        with open(os.path.join(output_dir, index_name), "w", encoding="utf-8") as f:
+            json.dump(index, f, indent=2, sort_keys=True)
+
+        print(f"Model weights saved in {output_dir}.")
+
+    print("- Fine-tune this model with:")
+    print(f"model_name_or_path: {output_dir}")
+    print("finetuning_type: freeze")
+    print(f"freeze_trainable_layers: {num_expand}")
+    print("use_llama_pro: true")

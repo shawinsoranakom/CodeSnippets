@@ -1,0 +1,58 @@
+def _real_extract(self, url):
+        video_id = self._match_id(url)
+
+        video = self._call_api('vodplayer/' + video_id, video_id)
+
+        title = video['name']
+        release_url = video['url']
+        try:
+            m3u8_url = self._download_json(release_url, video_id)['playURL']
+        except ExtractorError as e:
+            if isinstance(e.cause, compat_HTTPError) and e.cause.code == 403:
+                error = self._parse_json(e.cause.read().decode(), video_id)
+                if error.get('exception') == 'GeoLocationBlocked':
+                    self.raise_geo_restricted(countries=['US'])
+                raise ExtractorError(error['description'], expected=True)
+            raise
+        formats = self._extract_m3u8_formats(
+            m3u8_url, video_id, 'mp4',
+            entry_protocol='m3u8_native', m3u8_id='hls')
+        self._sort_formats(formats)
+
+        data = try_get(
+            video, lambda x: x['trackingData']['properties'], dict) or {}
+
+        duration = int_or_none(video.get('durationInSeconds')) or int_or_none(
+            video.get('duration')) or parse_duration(video.get('duration'))
+        timestamp = unified_timestamp(video.get('datePublished'))
+        creator = data.get('brand') or data.get('network') or video.get('network')
+        series = video.get('seriesName') or data.get(
+            'seriesName') or data.get('show')
+
+        subtitles = {}
+        for doc_rel in video.get('documentReleases', []):
+            rel_url = doc_rel.get('url')
+            if not url or doc_rel.get('format') != 'SCC':
+                continue
+            subtitles['en'] = [{
+                'url': rel_url,
+                'ext': 'scc',
+            }]
+            break
+
+        return {
+            'id': video_id,
+            'title': title,
+            'formats': formats,
+            'description': video.get('description'),
+            'duration': duration,
+            'timestamp': timestamp,
+            'age_limit': parse_age_limit(video.get('contentRating')),
+            'creator': creator,
+            'series': series,
+            'season_number': int_or_none(video.get('seasonNumber')),
+            'episode': video.get('name'),
+            'episode_number': int_or_none(video.get('episodeNumber')),
+            'release_year': int_or_none(video.get('releaseYear')),
+            'subtitles': subtitles,
+        }

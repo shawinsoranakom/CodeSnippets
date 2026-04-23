@@ -1,0 +1,48 @@
+async def build_output(self) -> Data:
+        try:
+            payload = {
+                "variables": {
+                    "first_message": self.first_message.strip() if self.first_message else None,
+                    "system_prompt": self.system_prompt.strip() if self.system_prompt else None,
+                    "conversation_history": self.conversation_history.strip() if self.conversation_history else None,
+                },
+                "from_number": self.from_number.strip(),
+                "to_number": self.to_number.strip(),
+            }
+
+            headers = {
+                "Authorization": self.api_key.strip(),
+                "Content-Type": "application/json",
+            }
+
+            await logger.ainfo("Sending POST request with payload: %s", payload)
+
+            # Send the POST request with a timeout
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://phone.olivya.io/create_zap_call",
+                    headers=headers,
+                    json=payload,
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+
+                # Parse and return the successful response
+                response_data = response.json()
+                await logger.ainfo("Request successful: %s", response_data)
+
+        except httpx.HTTPStatusError as http_err:
+            await logger.aexception("HTTP error occurred")
+            response_data = {"error": f"HTTP error occurred: {http_err}", "response_text": response.text}
+        except httpx.RequestError as req_err:
+            await logger.aexception("Request failed")
+            response_data = {"error": f"Request failed: {req_err}"}
+        except json.JSONDecodeError as json_err:
+            await logger.aexception("Response parsing failed")
+            response_data = {"error": f"Response parsing failed: {json_err}", "raw_response": response.text}
+        except Exception as e:  # noqa: BLE001
+            await logger.aexception("An unexpected error occurred")
+            response_data = {"error": f"An unexpected error occurred: {e!s}"}
+
+        # Return the response as part of the output
+        return Data(value=response_data)

@@ -1,0 +1,11 @@
+def test_primes(self):
+        assert is_prime(2)
+        assert is_prime(3)
+        assert is_prime(5)
+        assert is_prime(7)
+        assert is_prime(11)
+        assert is_prime(13)
+        assert is_prime(17)
+        assert is_prime(19)
+        assert is_prime(23)
+        assert is_prime(29)

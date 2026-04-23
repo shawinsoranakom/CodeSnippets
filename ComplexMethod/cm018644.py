@@ -1,0 +1,49 @@
+async def test_user_form(
+    hass: HomeAssistant, zeroconf_payload: ZeroconfServiceInfo
+) -> None:
+    """Test we get the user initiated form."""
+
+    # Ensure config flow will fail if no devices discovered yet
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"
+
+    # Initiate a discovery to allow config entry creation
+    await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=zeroconf_payload,
+    )
+
+    # Ensure config flow succeeds after discovery
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] is None
+    with (
+        patch(
+            "homeassistant.components.sonos.async_setup",
+            return_value=True,
+        ) as mock_setup,
+        patch(
+            "homeassistant.components.sonos.async_setup_entry",
+            return_value=True,
+        ) as mock_setup_entry,
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {},
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] is FlowResultType.CREATE_ENTRY
+    assert result2["title"] == "Sonos"
+    assert result2["data"] == {}
+    assert len(mock_setup.mock_calls) == 1
+    assert len(mock_setup_entry.mock_calls) == 1

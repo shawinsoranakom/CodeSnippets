@@ -1,0 +1,40 @@
+async def test_form_invalid_auth_local(
+    hass: HomeAssistant, side_effect: Exception, error: str
+) -> None:
+    """Test we handle invalid auth (local)."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"hub": TEST_SERVER},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "local_or_cloud"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"api_type": "local"},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "local"
+
+    with patch("pyoverkiz.client.OverkizClient.login", side_effect=side_effect):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                "host": TEST_HOST,
+                "token": TEST_TOKEN,
+                "verify_ssl": True,
+            },
+        )
+
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": error}

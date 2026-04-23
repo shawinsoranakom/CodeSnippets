@@ -1,0 +1,95 @@
+def _recurse(topdir, rel_offset, parent_dirs, rel_base=u'', checksum_check=False):
+        """
+        This is a closure (function utilizing variables from it's parent
+        function's scope) so that we only need one copy of all the containers.
+        Note that this function uses side effects (See the Variables used from
+        outer scope).
+
+        :arg topdir: The directory we are walking for files
+        :arg rel_offset: Integer defining how many characters to strip off of
+            the beginning of a path
+        :arg parent_dirs: Directories that we're copying that this directory is in.
+        :kwarg rel_base: String to prepend to the path after ``rel_offset`` is
+            applied to form the relative path.
+
+        Variables used from the outer scope
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        :r_files: Dictionary of files in the hierarchy.  See the return value
+            for :func:`walk` for the structure of this dictionary.
+        :local_follow: Read-only inside of :func:`_recurse`. Whether to follow symlinks
+        """
+        for base_path, sub_folders, files in os.walk(topdir):
+            for filename in files:
+                filepath = os.path.join(base_path, filename)
+                dest_filepath = os.path.join(rel_base, filepath[rel_offset:])
+
+                if os.path.islink(filepath):
+                    # Dereference the symlnk
+                    real_file = loader.get_real_file(os.path.realpath(filepath), decrypt=decrypt)
+                    if local_follow and os.path.isfile(real_file):
+                        # Add the file pointed to by the symlink
+                        r_files['files'].append(
+                            {
+                                "src": real_file,
+                                "dest": dest_filepath,
+                                "checksum": _get_local_checksum(checksum_check, real_file)
+                            }
+                        )
+                    else:
+                        # Mark this file as a symlink to copy
+                        r_files['symlinks'].append({"src": os.readlink(filepath), "dest": dest_filepath})
+                else:
+                    # Just a normal file
+                    real_file = loader.get_real_file(filepath, decrypt=decrypt)
+                    r_files['files'].append(
+                        {
+                            "src": real_file,
+                            "dest": dest_filepath,
+                            "checksum": _get_local_checksum(checksum_check, real_file)
+                        }
+                    )
+
+            for dirname in sub_folders:
+                dirpath = os.path.join(base_path, dirname)
+                dest_dirpath = os.path.join(rel_base, dirpath[rel_offset:])
+                real_dir = os.path.realpath(dirpath)
+                dir_stats = os.stat(real_dir)
+
+                if os.path.islink(dirpath):
+                    if local_follow:
+                        if (dir_stats.st_dev, dir_stats.st_ino) in parent_dirs:
+                            # Just insert the symlink if the target directory
+                            # exists inside of the copy already
+                            r_files['symlinks'].append({"src": os.readlink(dirpath), "dest": dest_dirpath})
+                        else:
+                            # Walk the dirpath to find all parent directories.
+                            new_parents = set()
+                            parent_dir_list = os.path.dirname(dirpath).split(os.path.sep)
+                            for parent in range(len(parent_dir_list), 0, -1):
+                                parent_stat = os.stat(u'/'.join(parent_dir_list[:parent]))
+                                if (parent_stat.st_dev, parent_stat.st_ino) in parent_dirs:
+                                    # Reached the point at which the directory
+                                    # tree is already known.  Don't add any
+                                    # more or we might go to an ancestor that
+                                    # isn't being copied.
+                                    break
+                                new_parents.add((parent_stat.st_dev, parent_stat.st_ino))
+
+                            if (dir_stats.st_dev, dir_stats.st_ino) in new_parents:
+                                # This was a circular symlink.  So add it as
+                                # a symlink
+                                r_files['symlinks'].append({"src": os.readlink(dirpath), "dest": dest_dirpath})
+                            else:
+                                # Walk the directory pointed to by the symlink
+                                r_files['directories'].append({"src": real_dir, "dest": dest_dirpath})
+                                offset = len(real_dir) + 1
+                                _recurse(real_dir, offset, parent_dirs.union(new_parents),
+                                         rel_base=dest_dirpath,
+                                         checksum_check=checksum_check)
+                    else:
+                        # Add the symlink to the destination
+                        r_files['symlinks'].append({"src": os.readlink(dirpath), "dest": dest_dirpath})
+                else:
+                    # Just a normal directory
+                    r_files['directories'].append({"src": dirpath, "dest": dest_dirpath})

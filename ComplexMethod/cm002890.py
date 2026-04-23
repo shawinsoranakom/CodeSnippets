@@ -1,0 +1,65 @@
+def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        fps: int | float | None = None,
+        **kwargs,
+    ):
+        if metadata is None or getattr(metadata, "fps", None) is None:
+            raise ValueError(
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm46V. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
+        total_frames = metadata.total_num_frames
+        max_frame_idx = total_frames - 1
+        duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
+
+        DYNAMIC_FPS_THRES = {30: 3, 300: 1, 2400: 0.5}
+        MAX_FRAME_COUNT_DYNAMIC = 640
+        MAX_DURATION = 2400
+        effective_duration = min(duration, MAX_DURATION)
+        if effective_duration <= 30:
+            target_fps = DYNAMIC_FPS_THRES[30]
+        elif effective_duration <= 300:
+            target_fps = DYNAMIC_FPS_THRES[300]
+        else:
+            target_fps = DYNAMIC_FPS_THRES[2400]
+        extract_t = int(effective_duration * target_fps * self.temporal_patch_size)
+        extract_t = min(extract_t, MAX_FRAME_COUNT_DYNAMIC)
+
+        duration_per_frame = 1 / metadata.fps
+        timestamps = [i * duration_per_frame for i in range(total_frames)]
+        max_second = int(duration)
+
+        if total_frames < extract_t:
+            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
+        else:
+            frame_indices = []
+            current_second = 0
+            inv_fps = 1 / (self.temporal_patch_size * target_fps)
+            for frame_index in range(total_frames):
+                if timestamps[frame_index] >= current_second:
+                    current_second += inv_fps
+                    frame_indices.append(frame_index)
+                    if current_second >= max_second:
+                        break
+
+        if len(frame_indices) < extract_t:
+            if len(frame_indices) == 0:
+                start, end = 0, max(total_frames - 1, 0)
+            else:
+                start, end = frame_indices[0], frame_indices[-1]
+            frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
+        elif len(frame_indices) > extract_t:
+            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
+
+        seen, uniq = set(), []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                uniq.append(idx)
+
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
+        return np.array(uniq)

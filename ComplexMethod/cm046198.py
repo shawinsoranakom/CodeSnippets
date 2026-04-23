@@ -1,0 +1,15 @@
+def set_imgsz(self, imgsz: list[int] = [1024, 1024]):
+        """Set image size to make model compatible with different image sizes."""
+        imgsz = [s // 4 for s in imgsz]
+        self.patches_resolution = imgsz
+        for i, layer in enumerate(self.layers):
+            input_resolution = (
+                imgsz[0] // (2 ** (i - 1 if i == 3 else i)),
+                imgsz[1] // (2 ** (i - 1 if i == 3 else i)),
+            )
+            layer.input_resolution = input_resolution
+            if layer.downsample is not None:
+                layer.downsample.input_resolution = input_resolution
+            if isinstance(layer, BasicLayer):
+                for b in layer.blocks:
+                    b.input_resolution = input_resolution

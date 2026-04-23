@@ -1,0 +1,178 @@
+def attach_mcp(
+    app: FastAPI,
+    *,                          # keyword‑only
+    base: str = "/mcp",
+    name: str | None = None,
+    base_url: str,              # eg. "http://127.0.0.1:8020"
+    timeout: float | None = None,  # httpx timeout in seconds; None = no limit
+) -> None:
+    """Call once after all routes are declared to expose WS+SSE MCP endpoints."""
+    server_name = name or app.title or "FastAPI-MCP"
+    mcp = Server(server_name)
+
+    # tools: Dict[str, Callable] = {}
+    tools: Dict[str, Tuple[Callable, Callable]] = {}
+    resources: Dict[str, Callable] = {}
+    templates: Dict[str, Callable] = {}
+
+    # register decorated FastAPI routes
+    for route in app.routes:
+        fn = getattr(route, "endpoint", None)
+        kind = getattr(fn, "__mcp_kind__", None)
+        if not kind:
+            continue
+
+        key = fn.__mcp_name__ or re.sub(r"[/{}}]", "_", route.path).strip("_")
+
+        # if kind == "tool":
+        #     tools[key] = _make_http_proxy(base_url, route)
+        if kind == "tool":
+            proxy = _make_http_proxy(base_url, route, timeout=timeout)
+            tools[key] = (proxy, fn)
+            continue
+        if kind == "resource":
+            resources[key] = fn
+        if kind == "template":
+            templates[key] = fn
+
+    # helpers for JSON‑Schema
+    def _schema(model: type[BaseModel] | None) -> dict:
+        return {"type": "object"} if model is None else model.model_json_schema()
+
+    def _body_model(fn: Callable) -> type[BaseModel] | None:
+        for p in inspect.signature(fn).parameters.values():
+            a = p.annotation
+            if inspect.isclass(a) and issubclass(a, BaseModel):
+                return a
+        return None
+
+    # MCP handlers
+    @mcp.list_tools()
+    async def _list_tools() -> List[t.Tool]:
+        out = []
+        for k, (proxy, orig_fn) in tools.items():
+            desc   = getattr(orig_fn, "__mcp_description__", None) or inspect.getdoc(orig_fn) or ""
+            schema = getattr(orig_fn, "__mcp_schema__", None) or _schema(_body_model(orig_fn))
+            out.append(
+                t.Tool(name=k, description=desc, inputSchema=schema)
+            )
+        return out
+
+
+    @mcp.call_tool()
+    async def _call_tool(name: str, arguments: Dict | None) -> List[t.TextContent]:
+        if name not in tools:
+            raise HTTPException(404, "tool not found")
+
+        proxy, _ = tools[name]
+        try:
+            res = await proxy(**(arguments or {}))
+        except HTTPException as exc:
+            # map server‑side errors into MCP "text/error" payloads
+            err = {"error": exc.status_code, "detail": exc.detail}
+            return [t.TextContent(type = "text", text=json.dumps(err))]
+        return [t.TextContent(type = "text", text=json.dumps(res, default=str))]
+
+    @mcp.list_resources()
+    async def _list_resources() -> List[t.Resource]:
+        return [
+            t.Resource(name=k, description=inspect.getdoc(f) or "", mime_type="application/json")
+            for k, f in resources.items()
+        ]
+
+    @mcp.read_resource()
+    async def _read_resource(name: str) -> List[t.TextContent]:
+        if name not in resources:
+            raise HTTPException(404, "resource not found")
+        res = resources[name]()
+        return [t.TextContent(type = "text", text=json.dumps(res, default=str))]
+
+    @mcp.list_resource_templates()
+    async def _list_templates() -> List[t.ResourceTemplate]:
+        return [
+            t.ResourceTemplate(
+                name=k,
+                description=inspect.getdoc(f) or "",
+                parameters={
+                    p: {"type": "string"} for p in _path_params(app, f)
+                },
+            )
+            for k, f in templates.items()
+        ]
+
+    init_opts = InitializationOptions(
+        server_name=server_name,
+        server_version="0.1.0",
+        capabilities=mcp.get_capabilities(
+            notification_options=NotificationOptions(),
+            experimental_capabilities={},
+        ),
+    )
+
+    # ── WebSocket transport ────────────────────────────────────
+    @app.websocket_route(f"{base}/ws")
+    async def _ws(ws: WebSocket):
+        await ws.accept()
+        c2s_send, c2s_recv = anyio.create_memory_object_stream(100)
+        s2c_send, s2c_recv = anyio.create_memory_object_stream(100)
+
+        from pydantic import TypeAdapter
+        from mcp.types import JSONRPCMessage
+        adapter = TypeAdapter(JSONRPCMessage)
+
+        init_done = anyio.Event()
+
+        async def srv_to_ws():
+            first = True 
+            try:
+                async for msg in s2c_recv:
+                    await ws.send_json(msg.model_dump())
+                    if first:
+                        init_done.set()
+                        first = False
+            finally:
+                # make sure cleanup survives TaskGroup cancellation
+                with anyio.CancelScope(shield=True):
+                    with suppress(RuntimeError):       # idempotent close
+                        await ws.close()
+
+        async def ws_to_srv():
+            try:
+                # 1st frame is always "initialize"
+                first = adapter.validate_python(await ws.receive_json())
+                await c2s_send.send(first)
+                await init_done.wait()          # block until server ready
+                while True:
+                    data = await ws.receive_json()
+                    await c2s_send.send(adapter.validate_python(data))
+            except WebSocketDisconnect:
+                await c2s_send.aclose()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(mcp.run, c2s_recv, s2c_send, init_opts)
+            tg.start_soon(ws_to_srv)
+            tg.start_soon(srv_to_ws)
+
+    # ── SSE transport (raw ASGI — avoids Starlette middleware conflict) ──
+    sse = SseServerTransport(f"{base}/messages/")
+
+    # Starlette's Route wraps plain async functions in request_response(),
+    # which calls handler(request) instead of handler(scope, receive, send).
+    # Using a callable class bypasses this — Route passes classes through
+    # as raw ASGI apps.  See #1594, #1850.
+    class _MCPSseApp:
+        async def __call__(self, scope, receive, send):
+            async with sse.connect_sse(scope, receive, send) as (read_stream, write_stream):
+                await mcp.run(read_stream, write_stream, init_opts)
+
+    app.routes.append(Route(f"{base}/sse", endpoint=_MCPSseApp()))
+    app.routes.append(Mount(f"{base}/messages", app=sse.handle_post_message))
+
+    # ── schema endpoint ───────────────────────────────────────
+    @app.get(f"{base}/schema")
+    async def _schema_endpoint():
+        return JSONResponse({
+            "tools": [x.model_dump() for x in await _list_tools()],
+            "resources": [x.model_dump() for x in await _list_resources()],
+            "resource_templates": [x.model_dump() for x in await _list_templates()],
+        })

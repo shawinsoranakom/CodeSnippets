@@ -1,0 +1,21 @@
+async def test_user_with_bad_cert(hass: HomeAssistant) -> None:
+    """Test user config with bad certificate."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+    with patch(
+        "homeassistant.components.cert_expiry.helper.async_get_cert",
+        side_effect=ssl.SSLError("some error"),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input={CONF_HOST: HOST, CONF_PORT: PORT}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == HOST
+    assert result["data"][CONF_HOST] == HOST
+    assert result["data"][CONF_PORT] == PORT
+    assert result["result"].unique_id == f"{HOST}:{PORT}"

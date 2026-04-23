@@ -1,0 +1,118 @@
+def _real_extract(self, url):
+        m = re.match(self._VALID_URL, url)
+        media_id = m.group('rts_id') or m.group('id')
+        display_id = m.group('display_id') or media_id
+
+        def download_json(internal_id):
+            return self._download_json(
+                'http://www.rts.ch/a/%s.html?f=json/article' % internal_id,
+                display_id)
+
+        all_info = download_json(media_id)
+
+        # media_id extracted out of URL is not always a real id
+        if 'video' not in all_info and 'audio' not in all_info:
+            entries = []
+
+            for item in all_info.get('items', []):
+                item_url = item.get('url')
+                if not item_url:
+                    continue
+                entries.append(self.url_result(item_url, 'RTS'))
+
+            if not entries:
+                page, urlh = self._download_webpage_handle(url, display_id)
+                if re.match(self._VALID_URL, urlh.geturl()).group('id') != media_id:
+                    return self.url_result(urlh.geturl(), 'RTS')
+
+                # article with videos on rhs
+                videos = re.findall(
+                    r'<article[^>]+class="content-item"[^>]*>\s*<a[^>]+data-video-urn="urn:([^"]+)"',
+                    page)
+                if not videos:
+                    videos = re.findall(
+                        r'(?s)<iframe[^>]+class="srg-player"[^>]+src="[^"]+urn:([^"]+)"',
+                        page)
+                if videos:
+                    entries = [self.url_result('srgssr:%s' % video_urn, 'SRGSSR') for video_urn in videos]
+
+            if entries:
+                return self.playlist_result(entries, media_id, all_info.get('title'))
+
+            internal_id = self._html_search_regex(
+                r'<(?:video|audio) data-id="([0-9]+)"', page,
+                'internal video id')
+            all_info = download_json(internal_id)
+
+        media_type = 'video' if 'video' in all_info else 'audio'
+
+        # check for errors
+        self._get_media_data('rts', media_type, media_id)
+
+        info = all_info['video']['JSONinfo'] if 'video' in all_info else all_info['audio']
+
+        title = info['title']
+
+        def extract_bitrate(url):
+            return int_or_none(self._search_regex(
+                r'-([0-9]+)k\.', url, 'bitrate', default=None))
+
+        formats = []
+        streams = info.get('streams', {})
+        for format_id, format_url in streams.items():
+            if format_id == 'hds_sd' and 'hds' in streams:
+                continue
+            if format_id == 'hls_sd' and 'hls' in streams:
+                continue
+            ext = determine_ext(format_url)
+            if ext in ('m3u8', 'f4m'):
+                format_url = self._get_tokenized_src(format_url, media_id, format_id)
+                if ext == 'f4m':
+                    formats.extend(self._extract_f4m_formats(
+                        format_url + ('?' if '?' not in format_url else '&') + 'hdcore=3.4.0',
+                        media_id, f4m_id=format_id, fatal=False))
+                else:
+                    formats.extend(self._extract_m3u8_formats(
+                        format_url, media_id, 'mp4', 'm3u8_native', m3u8_id=format_id, fatal=False))
+            else:
+                formats.append({
+                    'format_id': format_id,
+                    'url': format_url,
+                    'tbr': extract_bitrate(format_url),
+                })
+
+        download_base = 'http://rtsww%s-d.rts.ch/' % ('-a' if media_type == 'audio' else '')
+        for media in info.get('media', []):
+            media_url = media.get('url')
+            if not media_url or re.match(r'https?://', media_url):
+                continue
+            rate = media.get('rate')
+            ext = media.get('ext') or determine_ext(media_url, 'mp4')
+            format_id = ext
+            if rate:
+                format_id += '-%dk' % rate
+            formats.append({
+                'format_id': format_id,
+                'url': urljoin(download_base, media_url),
+                'tbr': rate or extract_bitrate(media_url),
+            })
+
+        self._check_formats(formats, media_id)
+        self._sort_formats(formats)
+
+        duration = info.get('duration') or info.get('cutout') or info.get('cutduration')
+        if isinstance(duration, compat_str):
+            duration = parse_duration(duration)
+
+        return {
+            'id': media_id,
+            'display_id': display_id,
+            'formats': formats,
+            'title': title,
+            'description': info.get('intro'),
+            'duration': duration,
+            'view_count': int_or_none(info.get('plays')),
+            'uploader': info.get('programName'),
+            'timestamp': parse_iso8601(info.get('broadcast_date')),
+            'thumbnail': unescapeHTML(info.get('preview_image_url')),
+        }

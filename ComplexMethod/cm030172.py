@@ -1,0 +1,22 @@
+def _print_lines(self, lines, start, breaks=(), frame=None):
+        """Print a range of lines."""
+        if frame:
+            current_lineno = frame.f_lineno
+            exc_lineno = self.tb_lineno.get(frame, -1)
+        else:
+            current_lineno = exc_lineno = -1
+        for lineno, line in enumerate(lines, start):
+            s = str(lineno).rjust(3)
+            if len(s) < 4:
+                s += ' '
+            if lineno in breaks:
+                s += 'B'
+            else:
+                s += ' '
+            if lineno == current_lineno:
+                s += '->'
+            elif lineno == exc_lineno:
+                s += '>>'
+            if self.colorize:
+                line = self._colorize_code(line)
+            self.message(s + '\t' + line.rstrip())

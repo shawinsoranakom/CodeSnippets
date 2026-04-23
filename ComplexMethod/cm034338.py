@@ -1,0 +1,48 @@
+def verify_file_signatures(fqcn, manifest_file, detached_signatures, keyring, required_successful_count, ignore_signature_errors):
+    # type: (str, str, list[str], str, str, list[str]) -> bool
+    successful = 0
+    error_messages = []
+
+    signature_count_requirements = re.match(SIGNATURE_COUNT_RE, required_successful_count).groupdict()
+
+    strict = signature_count_requirements['strict'] or False
+    require_all = signature_count_requirements['all']
+    require_count = signature_count_requirements['count']
+    if require_count is not None:
+        require_count = int(require_count)
+
+    for signature in detached_signatures:
+        signature = to_text(signature, errors='surrogate_or_strict')
+        try:
+            verify_file_signature(manifest_file, signature, keyring, ignore_signature_errors)
+        except CollectionSignatureError as error:
+            if error.ignore:
+                # Do not include ignored errors in either the failed or successful count
+                continue
+            error_messages.append(error.report(fqcn))
+        else:
+            successful += 1
+
+            if require_all:
+                continue
+
+            if successful == require_count:
+                break
+
+    if strict and not successful:
+        verified = False
+        display.display(f"Signature verification failed for '{fqcn}': no successful signatures")
+    elif require_all:
+        verified = not error_messages
+        if not verified:
+            display.display(f"Signature verification failed for '{fqcn}': some signatures failed")
+    else:
+        verified = not detached_signatures or require_count == successful
+        if not verified:
+            display.display(f"Signature verification failed for '{fqcn}': fewer successful signatures than required")
+
+    if not verified:
+        for msg in error_messages:
+            display.vvvv(msg)
+
+    return verified

@@ -1,0 +1,45 @@
+def decorate_methods(cls, decorator, testmatch=None):
+    """
+    Apply a decorator to all methods in a class matching a regular expression.
+
+    The given decorator is applied to all public methods of `cls` that are
+    matched by the regular expression `testmatch`
+    (``testmatch.search(methodname)``). Methods that are private, i.e. start
+    with an underscore, are ignored.
+
+    Parameters
+    ----------
+    cls : class
+        Class whose methods to decorate.
+    decorator : function
+        Decorator to apply to methods
+    testmatch : compiled regexp or str, optional
+        The regular expression. Default value is None, in which case the
+        nose default (``re.compile(r'(?:^|[\\b_\\.%s-])[Tt]est' % os.sep)``)
+        is used.
+        If `testmatch` is a string, it is compiled to a regular expression
+        first.
+
+    """
+    if testmatch is None:
+        testmatch = re.compile(rf"(?:^|[\\b_\\.{os.sep}-])[Tt]est")
+    else:
+        testmatch = re.compile(testmatch)
+    cls_attr = cls.__dict__
+
+    # delayed import to reduce startup time
+    from inspect import isfunction
+
+    methods = [_m for _m in cls_attr.values() if isfunction(_m)]
+    for function in methods:
+        try:
+            if hasattr(function, "compat_func_name"):
+                funcname = function.compat_func_name
+            else:
+                funcname = function.__name__
+        except AttributeError:
+            # not a function
+            continue
+        if testmatch.search(funcname) and not funcname.startswith("_"):
+            setattr(cls, funcname, decorator(function))
+    return

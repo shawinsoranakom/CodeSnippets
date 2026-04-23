@@ -1,0 +1,41 @@
+def normalize(self, s: str) -> str:
+        """Normalizes a string by removing unnecessary spaces.
+
+        Args:
+            s (str): String to normalize.
+
+        Returns:
+            str: Normalized string.
+        """
+        text_reg = r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})"
+        letter = "[a-zA-Z]"
+        noletter = r"[\W_^\d]"
+        names = []
+        for x in re.findall(text_reg, s):
+            pattern = r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})"
+            matches = re.findall(pattern, x[0])
+            for m in matches:
+                if (
+                        m
+                        not in [
+                    "\\operatorname",
+                    "\\mathrm",
+                    "\\text",
+                    "\\mathbf",
+                ]
+                        and m.strip() != ""
+                ):
+                    s = s.replace(m, m + "XXXXXXX")
+                    s = s.replace(" ", "")
+                    names.append(s)
+        if len(names) > 0:
+            s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
+        news = s
+        while True:
+            s = news
+            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter), r"\1\2", s)
+            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter), r"\1\2", news)
+            news = re.sub(r"(%s)\s+?(%s)" % (letter, noletter), r"\1\2", news)
+            if news == s:
+                break
+        return s.replace("XXXXXXX", " ")

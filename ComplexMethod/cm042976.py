@@ -1,0 +1,10 @@
+def test_format_size_edge_values(self):
+        """Test _format_size with edge values."""
+        assert _format_size(0) == "0.0 B"
+        assert _format_size(1) == "1.0 B"
+        assert _format_size(1023) == "1023.0 B"
+        assert _format_size(1024) == "1.0 KB"
+        assert _format_size(1024 * 1024 - 1) == "1024.0 KB"
+        assert _format_size(1024 * 1024) == "1.0 MB"
+        assert _format_size(1024 * 1024 * 1024) == "1.0 GB"
+        assert _format_size(1024 * 1024 * 1024 * 1024) == "1.0 TB"

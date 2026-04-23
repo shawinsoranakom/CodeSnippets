@@ -1,0 +1,42 @@
+def _eval_state(self, env: Environment) -> None:
+        # Initialise the retry counter for execution states.
+        env.states.context_object.context_object_data["State"]["RetryCount"] = 0
+
+        # Compute the branches' input: if declared this is the parameters, else the current memory state.
+        if self.parargs is not None:
+            self.parargs.eval(env=env)
+        # In both cases, the inputs are copied by value to the branches, to avoid cross branch state manipulation, and
+        # cached to allow them to be resubmitted in case of failure.
+        input_value = copy.deepcopy(env.stack.pop())
+
+        # Attempt to evaluate the state's logic through until it's successful, caught, or retries have run out.
+        while env.is_running():
+            try:
+                env.stack.append(input_value)
+                self._evaluate_with_timeout(env)
+                break
+            except FailureEventException as failure_event_ex:
+                failure_event: FailureEvent = self._from_error(env=env, ex=failure_event_ex)
+                error_output = self._construct_error_output_value(failure_event=failure_event)
+                env.states.set_error_output(error_output)
+                env.states.set_result(error_output)
+
+                if self.retry is not None:
+                    retry_outcome: RetryOutcome = self._handle_retry(
+                        env=env, failure_event=failure_event
+                    )
+                    if retry_outcome == RetryOutcome.CanRetry:
+                        continue
+
+                env.event_manager.add_event(
+                    context=env.event_history_context,
+                    event_type=HistoryEventType.ParallelStateFailed,
+                )
+
+                if self.catch is not None:
+                    self._handle_catch(env=env, failure_event=failure_event)
+                    catch_outcome: CatchOutcome = env.stack[-1]
+                    if catch_outcome == CatchOutcome.Caught:
+                        break
+
+                self._handle_uncaught(env=env, failure_event=failure_event)

@@ -1,0 +1,43 @@
+def correct_artificial_bias_quantize(self, float_model, img_data):
+        """Adding artificial bias and testing if bias persists after bias
+        correction. This test case changes the bias of a quantized submodule
+        """
+        artificial_model = copy.deepcopy(float_model)
+        artificial_model.qconfig = default_qconfig
+        torch.ao.quantization.prepare(artificial_model, inplace=True)
+        for data in img_data:
+            artificial_model(data[0])
+        torch.ao.quantization.convert(artificial_model, inplace=True)
+
+        # manually changing bias
+        for submodule in artificial_model.modules():
+            if type(submodule) in _supported_modules:
+                x = get_param(submodule, "bias")
+                weight = get_param(submodule, "weight")
+                if x is not None:
+                    submodule.set_weight_bias(weight, x.data * 3)
+
+        bias_correction(
+            float_model,
+            artificial_model,
+            img_data,
+            target_modules=_supported_modules_quantized,
+        )
+
+        # Trims off the shadow module,
+        for name, submodule in artificial_model.named_modules():
+            if isinstance(submodule, ns.Shadow):
+                parent_name, child_name = parent_child_names(name)
+                parent = get_module(artificial_model, parent_name)
+                parent._modules[child_name] = submodule.orig_module
+
+        for name, artificial_submodule in artificial_model.named_modules():
+            if type(artificial_submodule) in _supported_modules_quantized:
+                submodule = get_module(float_model, name)
+                float_bias = get_param(submodule, "bias")
+                artificial_bias = get_param(artificial_submodule, "bias")
+
+                self.assertTrue(
+                    self.compute_sqnr(float_bias, artificial_bias) > 30,
+                    "Correcting quantized bias produced too much noise, sqnr score too low",
+                )

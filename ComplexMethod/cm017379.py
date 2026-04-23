@@ -1,0 +1,25 @@
+def resolve_expression_parameter(self, compiler, connection, sql, param):
+        sql, params = super().resolve_expression_parameter(
+            compiler,
+            connection,
+            sql,
+            param,
+        )
+        if not connection.features.has_native_json_field and (
+            not hasattr(param, "as_sql") or isinstance(param, expressions.Value)
+        ):
+            if connection.vendor == "oracle":
+                value = param.value if hasattr(param, "value") else json.loads(param)
+                sql = "%s(JSON_OBJECT('value' VALUE %%s FORMAT JSON), '$.value')"
+                if isinstance(value, (list, dict)):
+                    sql %= "JSON_QUERY"
+                else:
+                    sql %= "JSON_VALUE"
+            elif connection.vendor == "mysql" or (
+                connection.vendor == "sqlite"
+                and params[0] not in connection.ops.jsonfield_datatype_values
+            ):
+                sql = "JSON_EXTRACT(%s, '$')"
+        if connection.vendor == "mysql" and connection.mysql_is_mariadb:
+            sql = "JSON_UNQUOTE(%s)" % sql
+        return sql, params

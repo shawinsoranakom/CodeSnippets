@@ -1,0 +1,62 @@
+async def test_button_identify(
+    hass: HomeAssistant, entity_registry: er.EntityRegistry
+) -> None:
+    """Test that a bulb can be identified."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=DEFAULT_ENTRY_TITLE,
+        data={CONF_HOST: IP_ADDRESS},
+        unique_id=SERIAL,
+    )
+    config_entry.add_to_hass(hass)
+    bulb = _mocked_bulb()
+    with (
+        _patch_discovery(device=bulb),
+        _patch_config_flow_try_connect(device=bulb),
+        _patch_device(device=bulb),
+    ):
+        await async_setup_component(hass, lifx.DOMAIN, {lifx.DOMAIN: {}})
+        await hass.async_block_till_done()
+
+    unique_id = f"{SERIAL}_identify"
+    entity_id = "button.my_bulb_identify"
+
+    entity = entity_registry.async_get(entity_id)
+    assert entity
+    assert not entity.disabled
+    assert entity.unique_id == unique_id
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN, "press", {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+
+    assert len(bulb.set_power.calls) == 2
+
+    waveform_call_dict = bulb.set_waveform_optional.calls[0][1]
+    waveform_call_dict.pop("callb")
+    assert waveform_call_dict == {
+        "rapid": False,
+        "value": {
+            "transient": True,
+            "color": [0, 0, 1, 3500],
+            "skew_ratio": 0,
+            "period": 1000,
+            "cycles": 3,
+            "waveform": 1,
+            "set_hue": True,
+            "set_saturation": True,
+            "set_brightness": True,
+            "set_kelvin": True,
+        },
+    }
+
+    bulb.set_power.reset_mock()
+    bulb.set_waveform_optional.reset_mock()
+    bulb.power_level = 65535
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN, "press", {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+
+    assert len(bulb.set_waveform_optional.calls) == 1
+    assert len(bulb.set_power.calls) == 0

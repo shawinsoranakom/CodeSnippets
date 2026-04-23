@@ -1,0 +1,128 @@
+def convert(
+        self,
+        file_stream: BinaryIO,
+        stream_info: StreamInfo,
+        **kwargs: Any,  # Options to pass to the converter
+    ) -> DocumentConverterResult:
+        # Parse the stream
+        encoding = "utf-8" if stream_info.charset is None else stream_info.charset
+        soup = bs4.BeautifulSoup(file_stream, "html.parser", from_encoding=encoding)
+
+        # Read the meta tags
+        metadata: Dict[str, str] = {}
+
+        if soup.title and soup.title.string:
+            metadata["title"] = soup.title.string
+
+        for meta in soup(["meta"]):
+            if not isinstance(meta, bs4.Tag):
+                continue
+
+            for a in meta.attrs:
+                if a in ["itemprop", "property", "name"]:
+                    key = str(meta.get(a, ""))
+                    content = str(meta.get("content", ""))
+                    if key and content:  # Only add non-empty content
+                        metadata[key] = content
+                    break
+
+        # Try reading the description
+        try:
+            for script in soup(["script"]):
+                if not isinstance(script, bs4.Tag):
+                    continue
+                if not script.string:  # Skip empty scripts
+                    continue
+                content = script.string
+                if "ytInitialData" in content:
+                    match = re.search(r"var ytInitialData = ({.*?});", content)
+                    if match:
+                        data = json.loads(match.group(1))
+                        attrdesc = self._findKey(data, "attributedDescriptionBodyText")
+                        if attrdesc and isinstance(attrdesc, dict):
+                            metadata["description"] = str(attrdesc.get("content", ""))
+                    break
+        except Exception as e:
+            print(f"Error extracting description: {e}")
+            pass
+
+        # Start preparing the page
+        webpage_text = "# YouTube\n"
+
+        title = self._get(metadata, ["title", "og:title", "name"])  # type: ignore
+        assert isinstance(title, str)
+
+        if title:
+            webpage_text += f"\n## {title}\n"
+
+        stats = ""
+        views = self._get(metadata, ["interactionCount"])  # type: ignore
+        if views:
+            stats += f"- **Views:** {views}\n"
+
+        keywords = self._get(metadata, ["keywords"])  # type: ignore
+        if keywords:
+            stats += f"- **Keywords:** {keywords}\n"
+
+        runtime = self._get(metadata, ["duration"])  # type: ignore
+        if runtime:
+            stats += f"- **Runtime:** {runtime}\n"
+
+        if len(stats) > 0:
+            webpage_text += f"\n### Video Metadata\n{stats}\n"
+
+        description = self._get(metadata, ["description", "og:description"])  # type: ignore
+        if description:
+            webpage_text += f"\n### Description\n{description}\n"
+
+        if IS_YOUTUBE_TRANSCRIPT_CAPABLE:
+            ytt_api = YouTubeTranscriptApi()
+            transcript_text = ""
+            parsed_url = urlparse(stream_info.url)  # type: ignore
+            params = parse_qs(parsed_url.query)  # type: ignore
+            if "v" in params and params["v"][0]:
+                video_id = str(params["v"][0])
+                transcript_list = ytt_api.list(video_id)
+                languages = ["en"]
+                for transcript in transcript_list:
+                    languages.append(transcript.language_code)
+                    break
+                try:
+                    youtube_transcript_languages = kwargs.get(
+                        "youtube_transcript_languages", languages
+                    )
+                    # Retry the transcript fetching operation
+                    transcript = self._retry_operation(
+                        lambda: ytt_api.fetch(
+                            video_id, languages=youtube_transcript_languages
+                        ),
+                        retries=3,  # Retry 3 times
+                        delay=2,  # 2 seconds delay between retries
+                    )
+
+                    if transcript:
+                        transcript_text = " ".join(
+                            [part.text for part in transcript]
+                        )  # type: ignore
+                except Exception as e:
+                    # No transcript available
+                    if len(languages) == 1:
+                        print(f"Error fetching transcript: {e}")
+                    else:
+                        # Translate transcript into first kwarg
+                        transcript = (
+                            transcript_list.find_transcript(languages)
+                            .translate(youtube_transcript_languages[0])
+                            .fetch()
+                        )
+                        transcript_text = " ".join([part.text for part in transcript])
+            if transcript_text:
+                webpage_text += f"\n### Transcript\n{transcript_text}\n"
+
+        title = title if title else (soup.title.string if soup.title else "")
+        assert isinstance(title, str)
+
+        return DocumentConverterResult(
+            markdown=webpage_text,
+            title=title,
+        )

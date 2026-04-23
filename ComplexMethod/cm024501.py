@@ -1,0 +1,96 @@
+async def test_doorbell_update_via_socketio(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Test creation of a doorbell that can be updated via socketio."""
+    doorbell_one = await _mock_doorbell_from_fixture(hass, "get_doorbell.json")
+
+    _, socketio = await _create_yale_with_devices(hass, [doorbell_one])
+    assert doorbell_one.pubsub_channel == "7c7a6672-59c8-3333-ffff-dcd98705cccc"
+    states = hass.states
+    assert states.get("binary_sensor.k98gidt45gul_name_motion").state == STATE_OFF
+    assert (
+        states.get("binary_sensor.k98gidt45gul_name_doorbell_ding").state == STATE_OFF
+    )
+
+    listener = list(socketio._listeners)[0]
+    listener(
+        doorbell_one.device_id,
+        dt_util.utcnow(),
+        {
+            "status": "imagecapture",
+            "data": {
+                "result": {
+                    "created_at": "2021-03-16T01:07:08.817Z",
+                    "secure_url": (
+                        "https://dyu7azbnaoi74.cloudfront.net/zip/images/zip.jpeg"
+                    ),
+                },
+            },
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    assert states.get("binary_sensor.k98gidt45gul_name_image_capture").state == STATE_ON
+
+    listener(
+        doorbell_one.device_id,
+        dt_util.utcnow(),
+        {
+            "status": "doorbell_motion_detected",
+            "data": {
+                "event": "doorbell_motion_detected",
+                "image": {
+                    "height": 640,
+                    "width": 480,
+                    "format": "jpg",
+                    "created_at": "2021-03-16T02:36:26.886Z",
+                    "bytes": 14061,
+                    "secure_url": (
+                        "https://dyu7azbnaoi74.cloudfront.net/images/1f8.jpeg"
+                    ),
+                    "url": "https://dyu7azbnaoi74.cloudfront.net/images/1f8.jpeg",
+                    "etag": "09e839331c4ea59eef28081f2caa0e90",
+                },
+                "doorbellName": "Front Door",
+                "callID": None,
+                "origin": "mars-api",
+                "mutableContent": True,
+            },
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    assert states.get("binary_sensor.k98gidt45gul_name_motion").state == STATE_ON
+    assert (
+        states.get("binary_sensor.k98gidt45gul_name_doorbell_ding").state == STATE_OFF
+    )
+
+    freezer.tick(40)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert (
+        states.get("binary_sensor.k98gidt45gul_name_image_capture").state == STATE_OFF
+    )
+
+    listener(
+        doorbell_one.device_id,
+        dt_util.utcnow(),
+        {
+            "status": "buttonpush",
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    assert states.get("binary_sensor.k98gidt45gul_name_doorbell_ding").state == STATE_ON
+
+    freezer.tick(40)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert (
+        states.get("binary_sensor.k98gidt45gul_name_doorbell_ding").state == STATE_OFF
+    )

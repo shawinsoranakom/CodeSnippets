@@ -1,0 +1,44 @@
+def check(self, test):
+        """ Return whether ``arg`` matches the specification: it must have at
+            least one tag in ``self.include`` and none in ``self.exclude`` for each tag category.
+        """
+        if not hasattr(test, 'test_tags'): # handle the case where the Test does not inherit from BaseCase and has no test_tags
+            _logger.debug("Skipping test '%s' because no test_tag found.", test)
+            return False
+
+        test_module = test.test_module
+        test_class = test.__class__.__name__
+        test_tags = test.test_tags | {test_module}  # module as test_tags deprecated, keep for retrocompatibility,
+        test_method = test._testMethodName
+        test_module_path = test.__module__
+        for prefix in ('odoo.addons', 'odoo.upgrade'):
+            test_module_path = test_module_path.removeprefix(prefix)
+        test_module_path = test_module_path.replace('.', '/') + '.py'
+
+        test._test_params = []
+
+        def _is_matching(test_filter):
+            (tag, module, klass, method, file_path) = test_filter
+            if tag and tag not in test_tags:
+                return False
+            elif file_path and not file_path.endswith(test_module_path):
+                return False
+            elif not file_path and module and module != test_module:
+                return False
+            elif klass and klass != test_class:
+                return False
+            elif method and test_method and method != test_method:
+                return False
+            return True
+
+        if any(_is_matching(test_filter) for test_filter in self.exclude):
+            return False
+
+        if not any(_is_matching(test_filter) for test_filter in self.include):
+            return False
+
+        for test_filter, parameter in self.parameters:
+            if _is_matching(test_filter):
+                test._test_params.append(parameter)
+
+        return True

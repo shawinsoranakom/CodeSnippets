@@ -1,0 +1,40 @@
+async def _async_update_data(self) -> dict:
+        """Fetch device state."""
+        try:
+            async with asyncio.timeout(10):
+                device_state_resp = await self.device.fetch_state()
+                device_state = device_state_resp.data.get(ATTR_DEVICE_STATE)
+                device_reporttime = device_state_resp.data.get("reportAt")
+                if device_reporttime is not None:
+                    rpt_time_delta = (
+                        datetime.now(tz=UTC).replace(tzinfo=None)
+                        - datetime.strptime(device_reporttime, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    ).total_seconds()
+                    self.dev_online = rpt_time_delta < YOLINK_OFFLINE_TIME
+                if self.paired_device is not None and device_state is not None:
+                    paried_device_state_resp = await self.paired_device.fetch_state()
+                    paried_device_state = paried_device_state_resp.data.get(
+                        ATTR_DEVICE_STATE
+                    )
+                    if (
+                        paried_device_state is not None
+                        and ATTR_DEVICE_STATE in paried_device_state
+                    ):
+                        device_state[ATTR_DEVICE_STATE] = paried_device_state[
+                            ATTR_DEVICE_STATE
+                        ]
+        except YoLinkAuthFailError as yl_auth_err:
+            raise ConfigEntryAuthFailed from yl_auth_err
+        except YoLinkClientError as yl_client_err:
+            _LOGGER.error(
+                "Failed to obtain device status, device: %s, error: %s ",
+                self.device.device_id,
+                yl_client_err,
+            )
+            raise UpdateFailed from yl_client_err
+        if device_state is not None:
+            dev_lora_info = device_state.get(ATTR_LORA_INFO)
+            if dev_lora_info is not None:
+                self.dev_net_type = dev_lora_info.get("devNetType")
+            return device_state
+        return {}

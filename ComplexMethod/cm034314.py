@@ -1,0 +1,76 @@
+def from_origin(cls, origin: Origin) -> SourceContext:
+        """Attempt to retrieve source and render a contextual indicator of an error location."""
+        from ansible.parsing.vault import is_encrypted  # avoid circular import
+
+        # DTFIX-FUTURE: support referencing the column after the end of the target line, so we can indicate where a missing character (quote) needs to be added
+        #               this is also useful for cases like end-of-stream reported by the YAML parser
+
+        # DTFIX-FUTURE: Implement line wrapping and match annotated line width to the terminal display width.
+
+        context_line_count: t.Final = 2
+        max_annotated_line_width: t.Final = 120
+        truncation_marker: t.Final = '...'
+
+        target_line_num = origin.line_num
+
+        if RedactAnnotatedSourceContext.current(optional=True):
+            return cls.error('content redacted', origin)
+
+        if not target_line_num or target_line_num < 1:
+            return cls.error(None, origin)  # message omitted since lack of line number is obvious from pos
+
+        start_line_idx = max(0, (target_line_num - 1) - context_line_count)  # if near start of file
+        target_col_num = origin.col_num
+
+        try:
+            with pathlib.Path(origin.path).open() as src:
+                first_line = src.readline()
+                lines = list(itertools.islice(itertools.chain((first_line,), src), start_line_idx, target_line_num))
+        except Exception as ex:
+            return cls.error(type(ex).__name__, origin)
+
+        if is_encrypted(first_line):
+            return cls.error('content encrypted', origin)
+
+        if len(lines) != target_line_num - start_line_idx:
+            return cls.error('file truncated', origin)
+
+        annotated_source_lines = []
+
+        line_label_width = len(str(target_line_num))
+        max_src_line_len = max_annotated_line_width - line_label_width - 1
+
+        usable_line_len = max_src_line_len
+
+        for line_num, line in enumerate(lines, start_line_idx + 1):
+            line = line.rstrip('\n')  # universal newline default mode on `open` ensures we'll never see anything but \n
+            line = line.replace('\t', ' ')  # mixed tab/space handling is intentionally disabled since we're both format and display config agnostic
+
+            if len(line) > max_src_line_len:
+                line = line[: max_src_line_len - len(truncation_marker)] + truncation_marker
+                usable_line_len = max_src_line_len - len(truncation_marker)
+
+            annotated_source_lines.append(f'{str(line_num).rjust(line_label_width)}{" " if line else ""}{line}')
+
+        if target_col_num and usable_line_len >= target_col_num >= 1:
+            column_marker = f'column {target_col_num}'
+
+            target_col_idx = target_col_num - 1
+
+            if target_col_idx + 2 + len(column_marker) > max_src_line_len:
+                column_marker = f'{" " * (target_col_idx - len(column_marker) - 1)}{column_marker} ^'
+            else:
+                column_marker = f'{" " * target_col_idx}^ {column_marker}'
+
+            column_marker = f'{" " * line_label_width} {column_marker}'
+
+            annotated_source_lines.append(column_marker)
+        elif target_col_num is None:
+            underline_length = len(annotated_source_lines[-1]) - line_label_width - 1
+            annotated_source_lines.append(f'{" " * line_label_width} {"^" * underline_length}')
+
+        return SourceContext(
+            origin=origin,
+            annotated_source_lines=annotated_source_lines,
+            target_line=lines[-1].rstrip('\n'),  # universal newline default mode on `open` ensures we'll never see anything but \n
+        )
